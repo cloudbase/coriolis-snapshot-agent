@@ -17,7 +17,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	veeamErrors "veeam-cli/errors"
+	veeamErrors "coriolis-veeam-bridge/errors"
 )
 
 const (

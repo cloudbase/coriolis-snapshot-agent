@@ -1,24 +1,47 @@
 package main
 
 import (
-	"encoding/binary"
+	"coriolis-veeam-bridge/internal/ioctl"
 	"fmt"
-	"os"
-	"syscall"
-	"unsafe"
-	"veeam-cli/internal"
-	//	"time"
-	//	"github.com/google/uuid"
+	"log"
 )
 
-func uintptrToByte(ptr uintptr) [8]byte {
-	var b [8]byte
-	binary.LittleEndian.PutUint64(b[:], uint64(ptr))
-	return b
-}
+//	"time"
+//	"github.com/google/uuid"
 
 func main() {
 
+	params := ioctl.DevID{
+		Major: 252,
+		Minor: 0,
+	}
+
+	snapStore, err := ioctl.CreateSnapStore(params, ioctl.DevID{})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if err := ioctl.SnapStoreAddMemory(snapStore, 2048*1024*1024); err != nil {
+		log.Fatal(err)
+	}
+
+	snapshot, err := ioctl.CreateSnapshot(params)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(snapshot.SnapshotID)
+
+	if err := ioctl.DeleteSnapshot(snapshot.SnapshotID); err != nil {
+		log.Fatal(err)
+	}
+
+	cleanUp, err := ioctl.SnapStoreCleanup(snapStore)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(cleanUp)
 	// devs, err := storage.BlockDeviceList(false)
 	// if err != nil {
 	// 	fmt.Println(err)
@@ -26,12 +49,6 @@ func main() {
 	// }
 	// js, _ := json.MarshalIndent(devs, "", "  ")
 	// fmt.Println(string(js))
-
-	dev, err := os.OpenFile(internal.VEEAM_DEV, os.O_RDWR, 0600)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
 
 	// // Snap Cleanup
 	// parsedUUID, err := uuid.Parse("e72a0232-7219-4dbe-8732-cc0b963b3ae5")
@@ -50,33 +67,6 @@ func main() {
 	// 	return
 	// }
 
-	params := internal.DevID{
-		Major: 252,
-		Minor: 0,
-	}
-
-	// // IOCTL_COLLECT_SNAPSHOT_IMAGES
-	// imageInfo := [2]ImageInfo{
-	// 	{
-	// 		OriginalDevID: params,
-	// 	},
-	// 	{
-	// 		OriginalDevID: params,
-	// 	},
-	// }
-
-	// snapshotImages := CollectSnapshotImages{
-	// 	Count:     2,
-	// 	ImageInfo: uintptrToByte(uintptr(unsafe.Pointer(&imageInfo))),
-	// }
-	// r1, _, err := syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), IOCTL_COLLECT_SNAPSHOT_IMAGES, uintptr(unsafe.Pointer(&snapshotImages)))
-	// fmt.Println(r1, err, snapshotImages)
-	// if r1 != 0 {
-	// 	fmt.Printf("Error creating store: %v --> %v\n", r1, err.Error())
-	// 	return
-	// }
-	// fmt.Println(imageInfo)
-
 	// // pre-allocate space on a device to hold the snap store data.
 	// snap_file := "/mnt/snapstores/veeam_file"
 	// // err = internal.CreateSnapStoreFile(snap_file, 2048*1024*1024)
@@ -85,39 +75,6 @@ func main() {
 	// ranges, devID, err := internal.GetFileRanges(snap_file)
 	// if err != nil {
 	// 	fmt.Println(err)
-	// 	return
-	// }
-
-	// // Create snap store
-	// newUUID := uuid.New()
-	// uuidAsBytes := [16]byte(newUUID)
-	// fmt.Printf("%s\n", newUUID)
-	// // Create snap store
-	// storeCreate := internal.SnapStoreCreate{
-	// 	ID: uuidAsBytes,
-	// 	// This is where the snap store file will be initialized
-	// 	DevID:    devID,
-	// 	Count:    1,
-	// 	DevIDPtr: uintptrToByte(uintptr(unsafe.Pointer(&params))),
-	// }
-
-	// r1, _, err := syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), internal.IOCTL_SNAPSTORE_CREATE, uintptr(unsafe.Pointer(&storeCreate)))
-	// fmt.Println(r1, err, storeCreate, storeCreate.ID)
-	// if r1 != 0 {
-	// 	fmt.Printf("Error creating store: %v --> %v\n", r1, err.Error())
-	// 	return
-	// }
-
-	// Set snap store memory limit.
-	// memLimit := internal.SnapStoreMemoryLimit{
-	// 	ID:   uuidAsBytes,
-	// 	Size: 1000 * 1024 * 1024,
-	// }
-
-	// r1, _, err = syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), internal.IOCTL_SNAPSTORE_MEMORY, uintptr(unsafe.Pointer(&memLimit)))
-	// fmt.Println(r1, err, memLimit)
-	// if r1 != 0 {
-	// 	fmt.Printf("Error setting store limit: %d --> %q\n", r1, err.Error())
 	// 	return
 	// }
 
@@ -148,49 +105,21 @@ func main() {
 	// 	return
 	// }
 
-	// storeCreate2 := internal.SnapStoreCreate{
-	// 	ID: uuidAsBytes,
-	// 	// DevID:    params,
-	// 	Count:    1,
-	// 	DevIDPtr: uintptrToByte(uintptr(unsafe.Pointer(&params))),
+	// cbtMap := make([]byte, cbtInfo.cbt_map_size)
+
+	// readCBT := ioctl.TrackingReadCBTBitmap{
+	// 	DevID:  params,
+	// 	Length: uint32(cbtInfo.cbt_map_size),
+	// 	Buff:   &cbtMap[0], //uintptrToByte(uintptr(unsafe.Pointer(&cbtMap[0]))),
 	// }
-	// r1, _, err = syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), internal.IOCTL_SNAPSTORE_CREATE, uintptr(unsafe.Pointer(&storeCreate2)))
-	// fmt.Println(r1, err, storeCreate, storeCreate.ID)
-	// if r1 != 0 {
-	// 	fmt.Printf("Error creating store: %v --> %v\n", r1, err.Error())
-	// 	return
+	// r1, _, err = syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), ioctl.IOCTL_TRACKING_READ_CBT_BITMAP, uintptr(unsafe.Pointer(&readCBT)))
+	// fmt.Println(r1, err, readCBT)
+
+	// for idx, val := range cbtMap {
+	// 	if val != 0 {
+	// 		fmt.Printf("Sector at offset %d was changed in snapshot %d\n", 512*idx, val)
+	// 	}
 	// }
-
-	info := internal.CBTInfo{
-		DevID: params,
-	}
-
-	trParams := internal.TrackingCollect{
-		Count:   1,
-		CBTInfo: uintptrToByte(uintptr(unsafe.Pointer(&info))),
-	}
-	r1, _, err := syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), internal.IOCTL_TRACKING_COLLECT, uintptr(unsafe.Pointer(&trParams)))
-	fmt.Println(r1, err, info)
-	if r1 != 0 {
-		fmt.Printf("Error setting store limit: %d --> %q\n", r1, err.Error())
-		return
-	}
-
-	cbtMap := make([]byte, info.CBTMapSize)
-
-	readCBT := internal.TrackingReadCBTBitmap{
-		DevID:  params,
-		Length: info.CBTMapSize,
-		Buff:   &cbtMap[0], //uintptrToByte(uintptr(unsafe.Pointer(&cbtMap[0]))),
-	}
-	r1, _, err = syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), internal.IOCTL_TRACKING_READ_CBT_BITMAP, uintptr(unsafe.Pointer(&readCBT)))
-	fmt.Println(r1, err, readCBT)
-
-	for idx, val := range cbtMap {
-		if val != 0 {
-			fmt.Printf("Sector at offset %d was changed in snapshot %d\n", 512*idx, val)
-		}
-	}
 
 	// info := internal.CBTInfo{
 	// 	DevID: params,
@@ -231,10 +160,4 @@ func main() {
 
 	// //r1, r2, err := syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), IOCTL_TRACKING_COLLECT, uintptr(unsafe.Pointer(&trParams)))
 	// //fmt.Println(r1, r2, err, info)
-
-	// // snapshot destroy
-	// var snapID uint64 = 18446625616201571136
-	// r1, _, err = syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), internal.IOCTL_SNAPSHOT_DESTROY, uintptr(unsafe.Pointer(&snapParams.SnapshotID)))
-	// fmt.Println(r1, err)
-
 }

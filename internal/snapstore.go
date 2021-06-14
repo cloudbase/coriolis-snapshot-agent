@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"coriolis-veeam-bridge/internal/ioctl"
 	"os"
 
 	"github.com/google/uuid"
@@ -23,7 +24,7 @@ func NewSnapStore(device string, SnapFilesRootDir string, size uint64) (*SnapSto
 	snapStore := &SnapStore{
 		ID:     uuidAsBytes,
 		Device: dev,
-		SnapDevice: DevID{
+		SnapDevice: ioctl.DevID{
 			Major: snapDevice.major,
 			Minor: snapDevice.minor,
 		},
@@ -35,8 +36,8 @@ func NewSnapStore(device string, SnapFilesRootDir string, size uint64) (*SnapSto
 
 type SnapStore struct {
 	ID               [16]byte
-	Device           DevID
-	SnapDevice       DevID
+	Device           ioctl.DevID
+	SnapDevice       ioctl.DevID
 	SnapFilesRootDir string
 	SnapFiles        []string
 }

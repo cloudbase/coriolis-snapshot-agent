@@ -11,7 +11,7 @@ import "C"
 import (
 	"fmt"
 
-	veeamErrors "veeam-cli/errors"
+	veeamErrors "coriolis-veeam-bridge/errors"
 )
 
 // BlkIDProbe runs a probe on devName and returns a map which contains a map containing

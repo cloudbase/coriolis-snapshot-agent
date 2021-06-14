@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"os"
 	"syscall"
-	"veeam-cli/internal/storage"
 
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 
-	veeamErrors "veeam-cli/errors"
+	veeamErrors "coriolis-veeam-bridge/errors"
+	"coriolis-veeam-bridge/internal/ioctl"
+	"coriolis-veeam-bridge/internal/storage"
 )
 
 type physicalDiskInfo struct {
@@ -96,39 +97,39 @@ func CreateSnapStoreFile(filePath string, size int64) error {
 	return errors.Wrap(fallocErr, "running fallocate")
 }
 
-func GetFileRanges(filePath string) ([]Range, DevID, error) {
+func GetFileRanges(filePath string) ([]ioctl.Range, ioctl.DevID, error) {
 	bDevInfo, err := getBlockDeviceInfoFromFile(filePath)
 	if err != nil {
-		return nil, DevID{}, errors.Wrap(err, "fetching block device info")
+		return nil, ioctl.DevID{}, errors.Wrap(err, "fetching block device info")
 	}
 	extents, err := GetExtents(filePath)
 	if err != nil {
-		return nil, DevID{}, errors.Wrap(err, "fetching extents")
+		return nil, ioctl.DevID{}, errors.Wrap(err, "fetching extents")
 	}
 
-	var ret []Range
+	var ret []ioctl.Range
 	for _, val := range extents {
-		ret = append(ret, Range{
+		ret = append(ret, ioctl.Range{
 			Left:  val.Physical,
 			Right: (val.Physical + val.Length - 1),
 		})
 	}
 
-	return ret, DevID{
+	return ret, ioctl.DevID{
 		Major: bDevInfo.major,
 		Minor: bDevInfo.minor,
 	}, nil
 }
 
-func findDeviceByPath(path string) (DevID, error) {
+func findDeviceByPath(path string) (ioctl.DevID, error) {
 	devices, err := storage.BlockDeviceList(false)
 	if err != nil {
-		return DevID{}, errors.Wrap(err, "fetching block devices")
+		return ioctl.DevID{}, errors.Wrap(err, "fetching block devices")
 	}
 
 	for _, val := range devices {
 		if val.Path == path {
-			return DevID{
+			return ioctl.DevID{
 				Major: val.Major,
 				Minor: val.Minor,
 			}, nil
@@ -136,12 +137,12 @@ func findDeviceByPath(path string) (DevID, error) {
 
 		for _, part := range val.Partitions {
 			if part.Path == path {
-				return DevID{
+				return ioctl.DevID{
 					Major: part.Major,
 					Minor: part.Minor,
 				}, nil
 			}
 		}
 	}
-	return DevID{}, errors.Errorf("device %s not found", path)
+	return ioctl.DevID{}, errors.Errorf("device %s not found", path)
 }
