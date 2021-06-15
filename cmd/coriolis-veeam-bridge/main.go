@@ -86,22 +86,6 @@ func main() {
 	// // err = internal.CreateSnapStoreFile(snap_file, 2048*1024*1024)
 	// // fmt.Println(err)
 
-	// cbtMap := make([]byte, cbtInfo.cbt_map_size)
-
-	// readCBT := ioctl.TrackingReadCBTBitmap{
-	// 	DevID:  params,
-	// 	Length: uint32(cbtInfo.cbt_map_size),
-	// 	Buff:   &cbtMap[0], //uintptrToByte(uintptr(unsafe.Pointer(&cbtMap[0]))),
-	// }
-	// r1, _, err = syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), ioctl.IOCTL_TRACKING_READ_CBT_BITMAP, uintptr(unsafe.Pointer(&readCBT)))
-	// fmt.Println(r1, err, readCBT)
-
-	// for idx, val := range cbtMap {
-	// 	if val != 0 {
-	// 		fmt.Printf("Sector at offset %d was changed in snapshot %d\n", 512*idx, val)
-	// 	}
-	// }
-
 	// //r1, r2, err := syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), IOCTL_TRACKING_ADD, uintptr(unsafe.Pointer(&params)))
 	// //fmt.Println(r1, r2, err)
 

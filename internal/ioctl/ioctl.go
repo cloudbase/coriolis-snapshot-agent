@@ -97,6 +97,44 @@ func GetCBTInfo(device types.DevID) (types.CBTInfo, error) {
 	}, nil
 }
 
+func AddDeviceToTracking(device types.DevID) error {
+	dev, err := os.OpenFile(VEEAM_DEV, os.O_RDWR, 0600)
+	if err != nil {
+		return errors.Wrap(err, "opening veeamsnap")
+	}
+	defer dev.Close()
+	deviceParams := C.struct_ioctl_dev_id_s{
+		major: C.int(device.Major),
+		minor: C.int(device.Minor),
+	}
+
+	r1, _, err := syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), IOCTL_TRACKING_ADD, uintptr(unsafe.Pointer(&deviceParams)))
+	if r1 != 0 {
+		return errors.Wrap(err, "running ioctl")
+	}
+
+	return nil
+}
+
+func RemoveDeviceFromTracking(device types.DevID) error {
+	dev, err := os.OpenFile(VEEAM_DEV, os.O_RDWR, 0600)
+	if err != nil {
+		return errors.Wrap(err, "opening veeamsnap")
+	}
+	defer dev.Close()
+	deviceParams := C.struct_ioctl_dev_id_s{
+		major: C.int(device.Major),
+		minor: C.int(device.Minor),
+	}
+
+	r1, _, err := syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), IOCTL_TRACKING_REMOVE, uintptr(unsafe.Pointer(&deviceParams)))
+	if r1 != 0 {
+		return errors.Wrap(err, "running ioctl")
+	}
+
+	return nil
+}
+
 func GetTrackingBlockSize() (blkSize uint32, err error) {
 	dev, err := os.OpenFile(VEEAM_DEV, os.O_RDWR, 0600)
 	if err != nil {
