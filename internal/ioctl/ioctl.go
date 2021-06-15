@@ -61,40 +61,60 @@ func goToCUUID(uuid [16]byte) (cUUID [16]C.uchar) {
 }
 
 // Tracking
-func GetCBTInfo(device types.DevID) (types.CBTInfo, error) {
+
+// GetCBTInfo returns Change Block Tracking information for one or multiple devices.
+// Change Block Tracking creates a bitmap equal in size with the number of sectors that
+// compose the device you add under tracking. The value of each element in the bitmap
+// will be equal to the snapshot number in which that sector was last changed.
+// The bitmap itself is capable of keeping track of 2^8 snapshots, before it is reset,
+// and a full sync/backup will have to be executed again. To keep track of which version
+// of the bitmap your snapshot coresponds to, you will need to use the GenerationID field
+// of the types.CBTInfo struct. IF what you saved in your application does not match the
+// GenerationID returned here, you *must* do a full sync.
+func GetCBTInfo(device []types.DevID) ([]types.CBTInfo, error) {
 	dev, err := os.OpenFile(VEEAM_DEV, os.O_RDWR, 0600)
 	if err != nil {
-		return types.CBTInfo{}, errors.Wrap(err, "opening veeamsnap")
+		return nil, errors.Wrap(err, "opening veeamsnap")
 	}
 	defer dev.Close()
 
-	cbtInfo := C.struct_cbt_info_s{
-		dev_id: C.struct_ioctl_dev_id_s{
-			major: C.int(device.Major),
-			minor: C.int(device.Minor),
-		},
+	cbtInfo := make([]C.struct_cbt_info_s, len(device))
+	for idx, val := range device {
+		cbtInfo[idx] = C.struct_cbt_info_s{
+			dev_id: C.struct_ioctl_dev_id_s{
+				major: C.int(val.Major),
+				minor: C.int(val.Minor),
+			},
+		}
 	}
 	trackingCollect := C.struct_ioctl_tracking_collect_s{
-		count: 1,
+		count: C.uint(len(device)),
 	}
-	C.setCBTInfo(&cbtInfo, &trackingCollect)
+	C.setCBTInfo(&cbtInfo[0], &trackingCollect)
 
 	r1, _, err := syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), IOCTL_TRACKING_COLLECT, uintptr(unsafe.Pointer(&trackingCollect)))
 	if r1 != 0 {
-		return types.CBTInfo{}, errors.Wrap(err, "running ioctl")
+		return nil, errors.Wrap(err, "running ioctl")
 	}
 
-	var generationID [16]byte
-	data := C.GoBytes(unsafe.Pointer(&cbtInfo.generationId[0]), C.int(16))
-	copy(generationID[:], data)
+	cbtInfoRet := make([]types.CBTInfo, len(cbtInfo))
+	for idx, val := range cbtInfo {
+		var generationID [16]byte
+		data := C.GoBytes(unsafe.Pointer(&val.generationId[0]), C.int(16))
+		copy(generationID[:], data)
+		cbtInfoRet[idx] = types.CBTInfo{
+			DevID: types.DevID{
+				Major: uint32(val.dev_id.major),
+				Minor: uint32(val.dev_id.minor),
+			},
+			DevCapacity:  uint64(val.dev_capacity),
+			CBTMapSize:   uint32(val.cbt_map_size),
+			SnapNumber:   byte(val.snap_number),
+			GenerationID: generationID,
+		}
+	}
 
-	return types.CBTInfo{
-		DevID:        device,
-		DevCapacity:  uint64(cbtInfo.dev_capacity),
-		CBTMapSize:   uint32(cbtInfo.cbt_map_size),
-		SnapNumber:   byte(cbtInfo.snap_number),
-		GenerationID: generationID,
-	}, nil
+	return cbtInfoRet, nil
 }
 
 func AddDeviceToTracking(device types.DevID) error {
@@ -150,7 +170,7 @@ func GetTrackingBlockSize() (blkSize uint32, err error) {
 }
 
 func GetCBTBitmap(device types.DevID) (types.TrackingReadCBTBitmap, error) {
-	cbtInfo, err := GetCBTInfo(device)
+	cbtInfo, err := GetCBTInfo([]types.DevID{device})
 	if err != nil {
 		return types.TrackingReadCBTBitmap{}, errors.Wrap(err, "fetching bitmap")
 	}
@@ -161,23 +181,23 @@ func GetCBTBitmap(device types.DevID) (types.TrackingReadCBTBitmap, error) {
 	}
 	defer dev.Close()
 
-	buff := make([]C.uchar, cbtInfo.CBTMapSize)
+	buff := make([]C.uchar, cbtInfo[0].CBTMapSize)
 
 	cbtBitmapParams := C.struct_ioctl_tracking_read_cbt_bitmap_s{
 		dev_id: C.struct_ioctl_dev_id_s{
 			major: C.int(device.Major),
 			minor: C.int(device.Minor),
 		},
-		length: C.uint(cbtInfo.CBTMapSize),
+		length: C.uint(cbtInfo[0].CBTMapSize),
 	}
 	C.setCBTBitmapBuffer(&cbtBitmapParams, &buff[0])
 
 	r1, _, err := syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), IOCTL_TRACKING_READ_CBT_BITMAP, uintptr(unsafe.Pointer(&cbtBitmapParams)))
-	if uint32(r1) != cbtInfo.CBTMapSize {
+	if uint32(r1) != cbtInfo[0].CBTMapSize {
 		return types.TrackingReadCBTBitmap{}, errors.Wrap(err, "running ioctl")
 	}
 
-	goBuff := make([]byte, cbtInfo.CBTMapSize)
+	goBuff := make([]byte, cbtInfo[0].CBTMapSize)
 
 	for idx, val := range buff {
 		goBuff[idx] = byte(val)
@@ -192,7 +212,21 @@ func GetCBTBitmap(device types.DevID) (types.TrackingReadCBTBitmap, error) {
 }
 
 // Snap store
-func CreateSnapStore(device types.DevID, snapDevice types.DevID) (types.SnapStore, error) {
+
+// CreateSnapStore creates a new snap store. There are 3 types of snap stores:
+//   * Memory - snap store data is hel in memory. To create a memory snap store, set the
+// Major and Minor numbers for snapDevice to 0. Extents will be added using the
+// IOCTL_SNAPSTORE_MEMORY ioctl call.
+//   * Single device - A snap store is expected to resize on a single volume. Extents will
+// be allocated via falloc, or other methods, on this device alone, and will be added to the
+// snap store. To create a single device snap store, specify the correct Major and Minor
+// numbers of the device you want to use. Extents will then be added using the IOCTL_SNAPSTORE_FILE
+// ioctl call.
+//   * Multi device - A snap store is expected to reside on multiple devices. To create a multi dev
+// snap store, set the Major and Minor numbers of snapDevice to -1. Extents will be added using the
+// IOCTL_SNAPSTORE_FILE_MULTIDEV ioctl call. The parameters for this call, includes the device ID of
+// the volume and the extens on this device that will be allocated to the snap store.
+func CreateSnapStore(device []types.DevID, snapDevice types.DevID) (types.SnapStore, error) {
 	dev, err := os.OpenFile(VEEAM_DEV, os.O_RDWR, 0600)
 	if err != nil {
 		return types.SnapStore{}, errors.Wrap(err, "opening veeamsnap")
@@ -202,9 +236,12 @@ func CreateSnapStore(device types.DevID, snapDevice types.DevID) (types.SnapStor
 	newUUID := uuid.New()
 	uuidAsBytes := [16]byte(newUUID)
 
-	devID := C.struct_ioctl_dev_id_s{
-		major: C.int(device.Major),
-		minor: C.int(device.Minor),
+	devID := make([]C.struct_ioctl_dev_id_s, len(device))
+	for idx, val := range device {
+		devID[idx] = C.struct_ioctl_dev_id_s{
+			major: C.int(val.Major),
+			minor: C.int(val.Minor),
+		}
 	}
 	snapStore := C.struct_ioctl_snapstore_create_s{
 		id:    goToCUUID(uuidAsBytes),
@@ -216,7 +253,7 @@ func CreateSnapStore(device types.DevID, snapDevice types.DevID) (types.SnapStor
 			minor: C.int(snapDevice.Minor),
 		}
 	}
-	C.setSnapStoreDev(&snapStore, &devID)
+	C.setSnapStoreDev(&snapStore, &devID[0])
 
 	r1, _, err := syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), IOCTL_SNAPSTORE_CREATE, uintptr(unsafe.Pointer(&snapStore)))
 	if r1 != 0 {
@@ -227,7 +264,7 @@ func CreateSnapStore(device types.DevID, snapDevice types.DevID) (types.SnapStor
 		ID:               cToGoUUID(snapStore.id),
 		SnapshotDeviceID: snapDevice,
 		Count:            1,
-		DevID:            &device,
+		DevID:            device,
 	}, nil
 }
 
@@ -299,21 +336,29 @@ func SnapStoreCleanup(snapStore types.SnapStore) (types.SnapStoreCleanupParams, 
 }
 
 // Snapshot
-func CreateSnapshot(device types.DevID) (types.Snapshot, error) {
+// CreateSnapshot creates a single snapshot of one or more devices. When snapshotting multiple
+// devices, you must make sure that you either create one snapstore per disk, each with its own
+// storage, or you create a multi device snap store and add a number of files equal to the nr
+// of disks you are snapshotting.
+func CreateSnapshot(device []types.DevID) (types.Snapshot, error) {
 	dev, err := os.OpenFile(VEEAM_DEV, os.O_RDWR, 0600)
 	if err != nil {
 		return types.Snapshot{}, errors.Wrap(err, "opening veeamsnap")
 	}
 	defer dev.Close()
 
-	devID := C.struct_ioctl_dev_id_s{
-		major: C.int(device.Major),
-		minor: C.int(device.Minor),
+	devID := make([]C.struct_ioctl_dev_id_s, len(device))
+	for idx, val := range device {
+		devID[idx] = C.struct_ioctl_dev_id_s{
+			major: C.int(val.Major),
+			minor: C.int(val.Minor),
+		}
 	}
+
 	snapshotParams := C.struct_ioctl_snapshot_create_s{
-		count: 1,
+		count: C.uint(len(device)),
 	}
-	C.setSnapshotDevice(&snapshotParams, &devID)
+	C.setSnapshotDevice(&snapshotParams, &devID[0])
 
 	r1, _, err := syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), IOCTL_SNAPSHOT_CREATE, uintptr(unsafe.Pointer(&snapshotParams)))
 	if r1 != 0 {
@@ -322,10 +367,12 @@ func CreateSnapshot(device types.DevID) (types.Snapshot, error) {
 	return types.Snapshot{
 		SnapshotID: uint64(snapshotParams.snapshot_id),
 		Count:      uint32(snapshotParams.count),
-		DevID:      &device,
+		DevID:      device,
 	}, nil
 }
 
+// DeleteSnapshot deletes a single snapshot identified by snapshotID. A single snapshot
+// may be of one or of multiple devices.
 func DeleteSnapshot(snapshotID uint64) error {
 	dev, err := os.OpenFile(VEEAM_DEV, os.O_RDWR, 0600)
 	if err != nil {

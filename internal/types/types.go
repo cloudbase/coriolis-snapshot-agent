@@ -43,7 +43,7 @@ type TrackingMarkDirtyBlocks struct {
 type Snapshot struct {
 	SnapshotID uint64
 	Count      uint32
-	DevID      *DevID
+	DevID      []DevID
 }
 
 type SnapshotErrno struct {
@@ -62,7 +62,7 @@ type SnapStore struct {
 	ID               [16]byte
 	SnapshotDeviceID DevID
 	Count            uint32
-	DevID            *DevID
+	DevID            []DevID
 }
 
 type SnapStoreMemoryLimit struct {
