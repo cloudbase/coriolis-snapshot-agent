@@ -13,7 +13,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"strings"
 
 	"github.com/pkg/errors"
 
@@ -24,6 +23,23 @@ const (
 	sysfsPath     = "/sys/block"
 	virtBlockPath = "/sys/devices/virtual/block"
 	mountsFile    = "/proc/mounts"
+
+	// Device types. Defined in include/scsi/scsi_proto.h
+	TYPE_DISK      = 0x00
+	TYPE_TAPE      = 0x01
+	TYPE_PRINTER   = 0x02
+	TYPE_PROCESSOR = 0x03 /* HP scanners use this */
+	TYPE_WORM      = 0x04 /* Treated as ROM by our system */
+	TYPE_ROM       = 0x05
+	TYPE_SCANNER   = 0x06
+	TYPE_MOD       = 0x07 /* Magneto-optical disk -
+	* - treated as TYPE_DISK */
+	TYPE_MEDIUM_CHANGER = 0x08
+	TYPE_COMM           = 0x09 /* Communications device */
+	TYPE_RAID           = 0x0c
+	TYPE_ENCLOSURE      = 0x0d /* Enclosure Services Device */
+	TYPE_RBC            = 0x0e
+	TYPE_NO_LUN         = 0x7f
 )
 
 // Partition holds the information about a particular partition
@@ -120,6 +136,9 @@ type BlockVolume struct {
 	Aliases []string
 	// DeviceMapperSlaves holds the block device(s) that back this device
 	DeviceMapperSlaves []string
+
+	// IsVirtual specifies if this device is a virtual device.
+	IsVirtual bool
 }
 
 // HasMountedPartitions checks if this disk has any mounted partitions
@@ -187,7 +206,7 @@ func getPartitionInfo(pth string) (Partition, error) {
 		return Partition{}, err
 	}
 
-	dMajor, dMinor, err := getMajorMinorFromDevice(dev)
+	dMajor, dMinor, err := GetMajorMinorFromDevice(dev)
 	if err != nil {
 		return Partition{}, err
 	}
@@ -262,7 +281,7 @@ func getBlockVolumeInfo(name string) (BlockVolume, error) {
 	}
 	defer dsk.Close()
 
-	dMajor, dMinor, err := getMajorMinorFromDevice(devicePath)
+	dMajor, dMinor, err := GetMajorMinorFromDevice(devicePath)
 	if err != nil {
 		return BlockVolume{}, err
 	}
@@ -305,6 +324,12 @@ func getBlockVolumeInfo(name string) (BlockVolume, error) {
 		return BlockVolume{}, errors.Wrap(err, "blkid probe failed")
 	}
 
+	var isVirtual bool
+	virtPath := path.Join(virtBlockPath, name)
+	if _, err := os.Stat(virtPath); err == nil {
+		isVirtual = true
+	}
+
 	// Information may be missing if this disk is raw.
 	// Not finding any info is not an error at this point.
 	ptType := volumeInfo["PTTYPE"]
@@ -325,17 +350,10 @@ func getBlockVolumeInfo(name string) (BlockVolume, error) {
 		FilesystemType:     fsType,
 		Major:              dMajor,
 		Minor:              dMinor,
+		IsVirtual:          isVirtual,
 	}
 
 	return vol, nil
-}
-
-func isDeviceMapper(name string) bool {
-	hintPath := path.Join(virtBlockPath, name, "dm")
-	if _, err := os.Stat(hintPath); err == nil {
-		return true
-	}
-	return false
 }
 
 // isValidDevice checks that the device identified by name, relative
@@ -346,27 +364,19 @@ func isValidDevice(name string) error {
 		return fmt.Errorf("%s not a block device", name)
 	}
 
-	if strings.HasPrefix(name, "loop") {
-		return fmt.Errorf("%s is a loop device", name)
-	}
-
 	if _, err := os.Stat(path.Join(sysfsPath, name)); err != nil {
 		// Filter out partitions
 		return fmt.Errorf("%s has no entry in %s (a partition?)", name, sysfsPath)
 	}
 
-	virtPath := path.Join(virtBlockPath, name)
-	if _, err := os.Stat(virtPath); err == nil {
-		// We want device mappers
-		if !isDeviceMapper(name) {
-			// exclude loop, ram, etc.
-			return fmt.Errorf("%s is a virtual device", name)
-		}
-	}
-
-	if removable, err := returnContentsAsInt(path.Join(sysfsPath, name, "removable")); err == nil {
-		if removable == 1 {
-			return fmt.Errorf("%s is removable", name)
+	// Check if CD-ROM
+	deviceType := path.Join(sysfsPath, name, "device", "type")
+	if _, err := os.Stat(deviceType); err == nil {
+		devTypeValue, err := returnContentsAsInt(deviceType)
+		if err == nil {
+			if devTypeValue == TYPE_ROM {
+				return fmt.Errorf("%s is a CD-ROM", name)
+			}
 		}
 	}
 
@@ -391,7 +401,7 @@ func GetBlockDeviceInfo(name string) (BlockVolume, error) {
 // information about locally visible disks. This does not include the block
 // device chunks.
 func BlockDeviceList(ignoreMounted bool) ([]BlockVolume, error) {
-	devList, err := ioutil.ReadDir("/dev")
+	devList, err := ioutil.ReadDir(sysfsPath)
 	if err != nil {
 		return nil, err
 	}
@@ -419,4 +429,21 @@ func BlockDeviceList(ignoreMounted bool) ([]BlockVolume, error) {
 		ret = append(ret, info)
 	}
 	return ret, nil
+}
+
+// FindDeviceByID returns the path in /dev to a device identified
+// by major:minor.
+func FindDeviceByID(major uint32, minor uint32) (string, error) {
+	devices, err := BlockDeviceList(false)
+	if err != nil {
+		return "", errors.Wrap(err, "fetching devices")
+	}
+
+	for _, val := range devices {
+		if val.Major == major && val.Minor == minor {
+			return val.Path, nil
+		}
+	}
+	return "", veeamErrors.NewNotFoundError(
+		fmt.Sprintf("could not find device [%d:%d]", major, minor))
 }

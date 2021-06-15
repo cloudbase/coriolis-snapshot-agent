@@ -193,7 +193,7 @@ func getAlignmentOffset(pth string) (int, error) {
 	return returnContentsAsInt(sizeFile)
 }
 
-func getMajorMinorFromDevice(devicePath string) (uint32, uint32, error) {
+func GetMajorMinorFromDevice(devicePath string) (uint32, uint32, error) {
 	st, err := stat(devicePath)
 	if err != nil {
 		return 0, 0, err

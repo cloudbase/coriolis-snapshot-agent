@@ -1,12 +1,9 @@
 package main
 
 import (
+	"coriolis-veeam-bridge/internal/storage"
 	"encoding/json"
 	"fmt"
-
-	"coriolis-veeam-bridge/internal/ioctl"
-	"coriolis-veeam-bridge/internal/types"
-	"log"
 )
 
 //	"time"
@@ -14,10 +11,10 @@ import (
 
 func main() {
 
-	params := types.DevID{
-		Major: 252,
-		Minor: 0,
-	}
+	// params := types.DevID{
+	// 	Major: 252,
+	// 	Minor: 0,
+	// }
 	// snapDevice := types.DevID{
 	// 	Major: 252,
 	// 	Minor: 17,
@@ -34,37 +31,37 @@ func main() {
 	// 	log.Fatal(err)
 	// }
 
-	cbtInfo, err := ioctl.GetCBTInfo(params)
-	if err != nil {
-		log.Fatal(err)
-	}
+	// cbtInfo, err := ioctl.GetCBTInfo(params)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
 
-	js, _ := json.MarshalIndent(cbtInfo, "", "  ")
-	fmt.Println(string(js))
+	// js, _ := json.MarshalIndent(cbtInfo, "", "  ")
+	// fmt.Println(string(js))
 
-	snapshot, err := ioctl.CreateSnapshot(params)
-	if err != nil {
-		log.Fatal(err)
-	}
+	// snapshot, err := ioctl.CreateSnapshot(params)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
 
-	bitmap, err := ioctl.GetCBTBitmap(params)
+	// bitmap, err := ioctl.GetCBTBitmap(params)
 
-	if err != nil {
-		fmt.Printf("%+v\n", err)
-		return
-	}
+	// if err != nil {
+	// 	fmt.Printf("%+v\n", err)
+	// 	return
+	// }
 
-	for idx, val := range bitmap.Buff {
-		if val != 0 {
-			fmt.Printf("sector nr %d changed in snapshot %d\n", idx, val)
-		}
-	}
+	// for idx, val := range bitmap.Buff {
+	// 	if val != 0 {
+	// 		fmt.Printf("sector nr %d changed in snapshot %d\n", idx, val)
+	// 	}
+	// }
 	// fmt.Println(snapshot.SnapshotID)
 	// fmt.Println(snapshot.Count)
 
-	if err := ioctl.DeleteSnapshot(snapshot.SnapshotID); err != nil {
-		log.Fatal(err)
-	}
+	// if err := ioctl.DeleteSnapshot(snapshot.SnapshotID); err != nil {
+	// 	log.Fatal(err)
+	// }
 
 	// cleanUp, err := ioctl.SnapStoreCleanup(snapStore)
 	// if err != nil {
@@ -73,13 +70,13 @@ func main() {
 
 	// fmt.Println(cleanUp)
 
-	// devs, err := storage.BlockDeviceList(false)
-	// if err != nil {
-	// 	fmt.Println(err)
-	// 	return
-	// }
-	// js, _ := json.MarshalIndent(devs, "", "  ")
-	// fmt.Println(string(js))
+	devs, err := storage.BlockDeviceList(false)
+	if err != nil {
+		fmt.Printf("%+v\n", err)
+		return
+	}
+	js, _ := json.MarshalIndent(devs, "", "  ")
+	fmt.Println(string(js))
 
 	// // pre-allocate space on a device to hold the snap store data.
 	// snap_file := "/mnt/snapstores/veeam_file"
