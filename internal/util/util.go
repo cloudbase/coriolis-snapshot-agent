@@ -1,4 +1,4 @@
-package internal
+package util
 
 import (
 	"fmt"
@@ -9,23 +9,23 @@ import (
 	"golang.org/x/sys/unix"
 
 	veeamErrors "coriolis-veeam-bridge/errors"
-	"coriolis-veeam-bridge/internal/ioctl"
 	"coriolis-veeam-bridge/internal/storage"
+	"coriolis-veeam-bridge/internal/types"
 )
 
-type physicalDiskInfo struct {
-	major      uint32
-	minor      uint32
-	devicePath string
-	sectorSize int64
+type PhysicalDiskInfo struct {
+	Major      uint32
+	Minor      uint32
+	DevicePath string
+	SectorSize int64
 }
 
 // getBlockDeviceInfoFromFile returns info about the block device that hosts the
 // file.
-func getBlockDeviceInfoFromFile(path string) (physicalDiskInfo, error) {
+func GetBlockDeviceInfoFromFile(path string) (PhysicalDiskInfo, error) {
 	fileInfo, err := os.Stat(path)
 	if err != nil {
-		return physicalDiskInfo{}, errors.Wrap(err, "running Stat()")
+		return PhysicalDiskInfo{}, errors.Wrap(err, "running Stat()")
 	}
 	sysStat := fileInfo.Sys().(*syscall.Stat_t)
 	// For a file, the Rdev is not relevant. The device that is returned here
@@ -36,30 +36,30 @@ func getBlockDeviceInfoFromFile(path string) (physicalDiskInfo, error) {
 
 	devices, err := storage.BlockDeviceList(false)
 	if err != nil {
-		return physicalDiskInfo{}, errors.Wrap(err, "fetching block devices")
+		return PhysicalDiskInfo{}, errors.Wrap(err, "fetching block devices")
 	}
 	for _, val := range devices {
 		if val.Major == major && val.Minor == minor {
-			return physicalDiskInfo{
-				major:      val.Major,
-				minor:      val.Minor,
-				sectorSize: val.LogicalSectorSize,
-				devicePath: val.Path,
+			return PhysicalDiskInfo{
+				Major:      val.Major,
+				Minor:      val.Minor,
+				SectorSize: val.LogicalSectorSize,
+				DevicePath: val.Path,
 			}, nil
 		}
 
 		for _, part := range val.Partitions {
 			if part.Major == major && part.Minor == minor {
-				return physicalDiskInfo{
-					major:      part.Major,
-					minor:      part.Minor,
-					sectorSize: val.LogicalSectorSize,
-					devicePath: part.Path,
+				return PhysicalDiskInfo{
+					Major:      part.Major,
+					Minor:      part.Minor,
+					SectorSize: val.LogicalSectorSize,
+					DevicePath: part.Path,
 				}, nil
 			}
 		}
 	}
-	return physicalDiskInfo{}, veeamErrors.NewNotFoundError(
+	return PhysicalDiskInfo{}, veeamErrors.NewNotFoundError(
 		fmt.Sprintf("could not find device for file %s", fileInfo.Name()))
 }
 
@@ -97,39 +97,39 @@ func CreateSnapStoreFile(filePath string, size int64) error {
 	return errors.Wrap(fallocErr, "running fallocate")
 }
 
-func GetFileRanges(filePath string) ([]ioctl.Range, ioctl.DevID, error) {
-	bDevInfo, err := getBlockDeviceInfoFromFile(filePath)
+func GetFileRanges(filePath string) ([]types.Range, types.DevID, error) {
+	bDevInfo, err := GetBlockDeviceInfoFromFile(filePath)
 	if err != nil {
-		return nil, ioctl.DevID{}, errors.Wrap(err, "fetching block device info")
+		return nil, types.DevID{}, errors.Wrap(err, "fetching block device info")
 	}
 	extents, err := GetExtents(filePath)
 	if err != nil {
-		return nil, ioctl.DevID{}, errors.Wrap(err, "fetching extents")
+		return nil, types.DevID{}, errors.Wrap(err, "fetching extents")
 	}
 
-	var ret []ioctl.Range
+	var ret []types.Range
 	for _, val := range extents {
-		ret = append(ret, ioctl.Range{
+		ret = append(ret, types.Range{
 			Left:  val.Physical,
 			Right: (val.Physical + val.Length - 1),
 		})
 	}
 
-	return ret, ioctl.DevID{
-		Major: bDevInfo.major,
-		Minor: bDevInfo.minor,
+	return ret, types.DevID{
+		Major: bDevInfo.Major,
+		Minor: bDevInfo.Minor,
 	}, nil
 }
 
-func findDeviceByPath(path string) (ioctl.DevID, error) {
+func FindDeviceByPath(path string) (types.DevID, error) {
 	devices, err := storage.BlockDeviceList(false)
 	if err != nil {
-		return ioctl.DevID{}, errors.Wrap(err, "fetching block devices")
+		return types.DevID{}, errors.Wrap(err, "fetching block devices")
 	}
 
 	for _, val := range devices {
 		if val.Path == path {
-			return ioctl.DevID{
+			return types.DevID{
 				Major: val.Major,
 				Minor: val.Minor,
 			}, nil
@@ -137,12 +137,12 @@ func findDeviceByPath(path string) (ioctl.DevID, error) {
 
 		for _, part := range val.Partitions {
 			if part.Path == path {
-				return ioctl.DevID{
+				return types.DevID{
 					Major: part.Major,
 					Minor: part.Minor,
 				}, nil
 			}
 		}
 	}
-	return ioctl.DevID{}, errors.Errorf("device %s not found", path)
+	return types.DevID{}, errors.Errorf("device %s not found", path)
 }

@@ -1,14 +1,14 @@
 package params
 
 import (
-	"coriolis-veeam-bridge/internal/ioctl"
+	"coriolis-veeam-bridge/internal/types"
 
 	"github.com/google/uuid"
 )
 
 type Volume struct {
 	Path               string
-	DeviceID           ioctl.DevID
+	DeviceID           types.DevID
 	Snapshots          int32
 	LastSnapshotNumber int32
 	ActiveSnapshots    []VolumeSnapshot
@@ -19,7 +19,7 @@ type VolumeSnapshot struct {
 	DevicePath string
 	// DeviceID is the major:minor number of the snapshot image
 	// created in /dev.
-	DeviceID ioctl.DevID
+	DeviceID types.DevID
 	// SnapshotID is the internal ID used to delete the snapshot
 	// once we are done with it.
 	SnapshotID uuid.UUID

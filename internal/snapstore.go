@@ -1,7 +1,8 @@
 package internal
 
 import (
-	"coriolis-veeam-bridge/internal/ioctl"
+	"coriolis-veeam-bridge/internal/types"
+	"coriolis-veeam-bridge/internal/util"
 	"os"
 
 	"github.com/google/uuid"
@@ -10,11 +11,11 @@ import (
 
 // NewSnapStore creates a new snap store for device.
 func NewSnapStore(device string, SnapFilesRootDir string, size uint64) (*SnapStore, error) {
-	dev, err := findDeviceByPath(device)
+	dev, err := util.FindDeviceByPath(device)
 	if err != nil {
 		return nil, errors.Wrap(err, "finding device")
 	}
-	snapDevice, err := getBlockDeviceInfoFromFile(SnapFilesRootDir)
+	snapDevice, err := util.GetBlockDeviceInfoFromFile(SnapFilesRootDir)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting block device")
 	}
@@ -24,9 +25,9 @@ func NewSnapStore(device string, SnapFilesRootDir string, size uint64) (*SnapSto
 	snapStore := &SnapStore{
 		ID:     uuidAsBytes,
 		Device: dev,
-		SnapDevice: ioctl.DevID{
-			Major: snapDevice.major,
-			Minor: snapDevice.minor,
+		SnapDevice: types.DevID{
+			Major: snapDevice.Major,
+			Minor: snapDevice.Minor,
 		},
 		SnapFilesRootDir: SnapFilesRootDir,
 	}
@@ -36,8 +37,8 @@ func NewSnapStore(device string, SnapFilesRootDir string, size uint64) (*SnapSto
 
 type SnapStore struct {
 	ID               [16]byte
-	Device           ioctl.DevID
-	SnapDevice       ioctl.DevID
+	Device           types.DevID
+	SnapDevice       types.DevID
 	SnapFilesRootDir string
 	SnapFiles        []string
 }
