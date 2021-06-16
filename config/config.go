@@ -11,6 +11,10 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/pkg/errors"
+
+	"coriolis-veeam-bridge/internal/storage"
+	"coriolis-veeam-bridge/internal/types"
+	"coriolis-veeam-bridge/internal/util"
 )
 
 const (
@@ -18,7 +22,11 @@ const (
 	DefaultConfigFile = "/etc/coriolis-veeam-bridge/config.toml"
 
 	// DefaultDBFile is the default location for the DB file.
-	DefaultDBFile = "/etc/coriolis-veeam-bridge/veeam-bridge.db"
+	// We cannot persist CBT info and snapshots across reboots. Saving
+	// the application state in an ephemeral folder saves us the trouble
+	// of detecting a reboot and cleaning up stale data. We just recreate
+	// the database from scratch and initialize snap stores, tracking, etc.
+	DefaultDBFile = "/dev/shm/coriolis-veeam-bridge/veeam-bridge.db"
 
 	// DefaultListenPort is the default HTTPS listen port
 	DefaultListenPort = 8899
@@ -28,6 +36,50 @@ const (
 	DefaultJWTTTL time.Duration = 168 * time.Hour
 )
 
+// findAllInvolvedDevices accepts an array of device ids, and determins whether or
+// not they are part of a device mapper. If they are, all involved devices will be
+// returned as an array of device IDs.
+// We currently cannot safely allocate extents meant for CoW pages on a device mapper
+// due to the fact that Coriolis needs to synd disk data of raw physical disks, not
+// of individual partitions.
+func findAllInvolvedDevices(devices []types.DevID) ([]string, error) {
+	var ret []string
+	allDevices, err := storage.BlockDeviceList(false)
+	if err != nil {
+		return nil, errors.Wrap(err, "fetching devices")
+	}
+
+	devicePaths := map[string]types.DevID{}
+	for _, val := range devices {
+		devPath, err := storage.FindDeviceByID(val.Major, val.Minor)
+		if err != nil {
+			return nil, errors.Wrap(err, "finding device path")
+		}
+		devicePaths[devPath] = val
+	}
+
+	for _, val := range allDevices {
+		found := false
+		if _, ok := devicePaths[val.Path]; ok {
+			ret = append(ret, val.Path)
+			found = true
+		} else {
+			for _, part := range val.Partitions {
+				if _, ok := devicePaths[part.Path]; ok {
+					ret = append(ret, val.Path)
+					found = true
+				}
+				break
+			}
+		}
+
+		if found && val.IsVirtual {
+			ret = append(ret, val.DeviceMapperSlaves...)
+		}
+	}
+	return ret, nil
+}
+
 // ParseConfig parses the file passed in as cfgFile and returns
 // a *Config object.
 func ParseConfig(cfgFile string) (*Config, error) {
@@ -36,9 +88,28 @@ func ParseConfig(cfgFile string) (*Config, error) {
 		return nil, errors.Wrap(err, "decoding toml")
 	}
 
-	if config.CoWDestination == "" {
+	if config.CoWDestination == nil || len(config.CoWDestination) == 0 {
 		return nil, fmt.Errorf("cow_destination is mandatory")
 	}
+
+	var devices []types.DevID
+	for _, val := range config.CoWDestination {
+		devInfo, err := util.GetBlockDeviceInfoFromFile(val)
+		if err != nil {
+			return nil, errors.Wrap(err, "fetching cow destination info")
+		}
+
+		devices = append(devices, types.DevID{
+			Major: devInfo.Major,
+			Minor: devInfo.Minor,
+		})
+	}
+
+	devPaths, err := findAllInvolvedDevices(devices)
+	if err != nil {
+		return nil, errors.Wrap(err, "determining device paths")
+	}
+	config.cowDestinationDevicePaths = devPaths
 
 	if config.DBFile == "" {
 		config.DBFile = DefaultDBFile
@@ -65,7 +136,19 @@ type Config struct {
 	// extents will be pre-allocated via files. This folder must
 	// live on a separate disk, which will be excluded from being
 	// snapshotted.
-	CoWDestination string `toml:"cow_destination"`
+	//
+	// Note: If the destination is on a device mapper, all disks that
+	// compose that device mapper will also be excluded.
+	//
+	// In future versions, you will be able to host these folders
+	// on disks that do take part of the snapshotting process.
+	CoWDestination []string `toml:"cow_destination"`
+
+	cowDestinationDevicePaths []string
+}
+
+func (c *Config) CowDestinationDevices() []string {
+	return c.cowDestinationDevicePaths
 }
 
 // Validate validates the config options

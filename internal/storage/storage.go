@@ -443,6 +443,12 @@ func FindDeviceByID(major uint32, minor uint32) (string, error) {
 		if val.Major == major && val.Minor == minor {
 			return val.Path, nil
 		}
+
+		for _, partition := range val.Partitions {
+			if partition.Major == major && partition.Minor == minor {
+				return partition.Path, nil
+			}
+		}
 	}
 	return "", veeamErrors.NewNotFoundError(
 		fmt.Sprintf("could not find device [%d:%d]", major, minor))

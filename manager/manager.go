@@ -69,18 +69,53 @@ func internalPartitionToParamsPartition(partition storage.Partition) params.Part
 	}
 }
 
-func (m *Snapshot) ListDisks(includeVirtual bool) ([]params.BlockVolume, error) {
+func (m *Snapshot) listDisks(includeVirtual bool) ([]storage.BlockVolume, error) {
 	devices, err := storage.BlockDeviceList(false)
 	if err != nil {
 		return nil, errors.Wrap(err, "listing devices")
 	}
 
-	var ret []params.BlockVolume
+	toExclude := m.cfg.CowDestinationDevices()
+
+	var ret []storage.BlockVolume
 	for _, val := range devices {
 		if !includeVirtual && val.IsVirtual {
 			continue
 		}
-		ret = append(ret, internalBlockVolumeToParamsBlockVolume(val))
+
+		shouldExclude := false
+		for _, cowDevice := range toExclude {
+			if cowDevice == val.Path {
+				shouldExclude = true
+				break
+			} else {
+				for _, part := range val.Partitions {
+					if part.Path == cowDevice {
+						shouldExclude = true
+						break
+					}
+				}
+			}
+		}
+		if shouldExclude {
+			continue
+		}
+
+		ret = append(ret, val)
+	}
+	return ret, nil
+
+}
+
+func (m *Snapshot) ListDisks(includeVirtual bool) ([]params.BlockVolume, error) {
+	devices, err := m.listDisks(includeVirtual)
+	if err != nil {
+		return nil, errors.Wrap(err, "listing devices")
+	}
+
+	ret := make([]params.BlockVolume, len(devices))
+	for idx, val := range devices {
+		ret[idx] = internalBlockVolumeToParamsBlockVolume(val)
 	}
 	return ret, nil
 }
