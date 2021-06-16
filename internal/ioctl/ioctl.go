@@ -24,6 +24,10 @@ void setSnapStoreFileRanges(struct ioctl_snapstore_file_add_s* fileAdd, struct i
 	fileAdd->ranges = ranges;
 }
 
+void setSnapStoreFileMultiDevRanges(struct ioctl_snapstore_file_add_multidev_s* fileAdd, struct ioctl_range_s* ranges) {
+	fileAdd->ranges = ranges;
+}
+
 void setCBTBitmapBuffer(struct ioctl_tracking_read_cbt_bitmap_s* cbtBitmapParams, unsigned char* buff) {
 	cbtBitmapParams->buff = buff;
 }
@@ -318,6 +322,37 @@ func SnapStoreAddFile(snapStore types.SnapStore, file string) error {
 	}
 	C.setSnapStoreFileRanges(&snapAddFile, &cRanges[0])
 	r1, _, err := syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), IOCTL_SNAPSTORE_FILE, uintptr(unsafe.Pointer(&snapAddFile)))
+	if r1 != 0 {
+		return errors.Wrap(err, "running ioctl")
+	}
+	return nil
+}
+
+func SnapStoreAddFileMultiDev(snapStore types.SnapStore, file string) error {
+	dev, err := os.OpenFile(VEEAM_DEV, os.O_RDWR, 0600)
+	if err != nil {
+		return errors.Wrap(err, "opening veeamsnap")
+	}
+	defer dev.Close()
+
+	ranges, devID, err := util.GetFileRanges(file)
+	if err != nil {
+		if err != nil {
+			return errors.Wrap(err, "fetching file ranges")
+		}
+	}
+
+	cRanges := make([]C.struct_ioctl_range_s, len(ranges))
+	snapAddFile := C.struct_ioctl_snapstore_file_add_multidev_s{
+		id:          goToCUUID(snapStore.ID),
+		range_count: C.uint(len(ranges)),
+		dev_id: C.struct_ioctl_dev_id_s{
+			major: C.int(devID.Major),
+			minor: C.int(devID.Minor),
+		},
+	}
+	C.setSnapStoreFileMultiDevRanges(&snapAddFile, &cRanges[0])
+	r1, _, err := syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), IOCTL_SNAPSTORE_FILE_MULTIDEV, uintptr(unsafe.Pointer(&snapAddFile)))
 	if r1 != 0 {
 		return errors.Wrap(err, "running ioctl")
 	}
