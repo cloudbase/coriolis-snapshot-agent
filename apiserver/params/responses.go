@@ -148,3 +148,31 @@ type BlockVolume struct {
 	// IsVirtual specifies if this device is a virtual device.
 	IsVirtual bool `json:"is_virtual"`
 }
+
+type SnapStoreLocation struct {
+	// AvailableCapacity is the amount of free disk space
+	// on a device. This value can be different from
+	// TotalCapacity - AllocatedCapacity, as there is no guarantee
+	// that we will have sole access to the device.
+	AvailableCapacity uint64 `json:"available_capacity"`
+	// AllocatedCapacity is the amount of disk space that has
+	// been allocated to snap stores. This value is calculated by
+	// summing up the amount of disk space allocated by each file
+	// that this service keeps track of.
+	AllocatedCapacity uint64 `json:"allocated_capacity"`
+	// TotalCapacity is the total amount of disk space a mount
+	// point has.
+	TotalCapacity uint64 `json:"total_capacity"`
+	// Path is the path on the filesystem to the folder where
+	// snap store storage is allocated.
+	Path string
+	// DevicePath is the device in /dev which the folder represented
+	// by Path is stored in.
+	DevicePath string `json:"device_path"`
+	// Major is the major number of the device which is mounted
+	// in Path.
+	Major uint32 `json:"major"`
+	// Minor is the minor number of the device which is mounted
+	// in Path.
+	Minor uint32 `json:"minor"`
+}

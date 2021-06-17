@@ -20,6 +20,20 @@ type PhysicalDiskInfo struct {
 	SectorSize int64
 }
 
+type FileSystemInfo struct {
+	// Type is the type of filesystem
+	Type int64
+	// BlockSize is the optimal transfer block size
+	BlockSize int64
+	// Blocks is the total data blocks in filesystem
+	Blocks uint64
+	// BlocksFree is the number of free blocks in filesystem
+	BlocksFree uint64
+	// BlocksAvailable is the total number of free blocks
+	// available to unprivileged user
+	BlocksAvailable uint64
+}
+
 // getBlockDeviceInfoFromFile returns info about the block device that hosts the
 // file.
 func GetBlockDeviceInfoFromFile(path string) (PhysicalDiskInfo, error) {
@@ -61,6 +75,21 @@ func GetBlockDeviceInfoFromFile(path string) (PhysicalDiskInfo, error) {
 	}
 	return PhysicalDiskInfo{}, veeamErrors.NewNotFoundError(
 		fmt.Sprintf("could not find device for file %s", fileInfo.Name()))
+}
+
+func GetFileSystemInfoFromPath(path string) (FileSystemInfo, error) {
+	var stat unix.Statfs_t
+	if err := unix.Statfs(path, &stat); err != nil {
+		return FileSystemInfo{}, errors.Wrap(err, "fetching filesystem information")
+	}
+
+	return FileSystemInfo{
+		Type:            stat.Type,
+		BlockSize:       stat.Bsize,
+		Blocks:          stat.Blocks,
+		BlocksFree:      stat.Bfree,
+		BlocksAvailable: stat.Bavail,
+	}, nil
 }
 
 // CreateSnapStoreFile creates a new pre-allocated file of the given size.

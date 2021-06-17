@@ -1,16 +1,20 @@
 package db
 
 import (
+	"coriolis-veeam-bridge/internal/types"
 	"time"
 
-	"github.com/asdine/storm"
 	"github.com/pkg/errors"
-	bolt "go.etcd.io/bbolt"
+	"github.com/timshannon/bolthold"
+	"go.etcd.io/bbolt"
 )
 
 // Open opens the database at path and returns a *bolt.DB object
-func Open(path string) (*storm.DB, error) {
-	db, err := storm.Open(path, storm.BoltOptions(0600, &bolt.Options{Timeout: 1 * time.Second}))
+func Open(path string) (*bolthold.Store, error) {
+	bboltOptions := bbolt.Options{
+		Timeout: 1 * time.Second,
+	}
+	db, err := bolthold.Open(path, 0600, &bolthold.Options{Options: &bboltOptions})
 	if err != nil {
 		return nil, errors.Wrap(err, "opening database")
 	}
@@ -34,12 +38,97 @@ func NewDatabase(dbFile string) (*Database, error) {
 // Database is the database interface to the bold db
 type Database struct {
 	location string
-	con      *storm.DB
+	con      *bolthold.Store
 }
 
-// DBConnection returns the DB connection
-func (d *Database) DBConnection() *storm.DB {
-	return d.con
+// GetTrackedDisk gets one tracked disk entity from the database
+func (d *Database) GetTrackedDisk(device types.DevID) (TrackedDisk, error) {
+	return TrackedDisk{}, nil
+}
+
+// GetAllTrackedDisks fetches all tracked disk entities from the database.
+func (d *Database) GetAllTrackedDisks() ([]TrackedDisk, error) {
+	return nil, nil
+}
+
+// CreateTrackedDisk adds a new tracked disk entity to the database.
+func (d *Database) CreateTrackedDisk(device types.DevID) (TrackedDisk, error) {
+	return TrackedDisk{}, nil
+}
+
+// RemoveTrackedDisk removes a tracked disk entity from the database.
+func (d *Database) RemoveTrackedDisk(device types.DevID) error {
+	return nil
+}
+
+// GetSnapshot gets one snapshot entity, identified by snapID, from the database.
+func (d *Database) GetSnapshot(snapID uint64) (Snapshot, error) {
+	return Snapshot{}, nil
+}
+
+// ListSnapshotsForDevice lists all snapshots associated with a device.
+func (d *Database) ListSnapshotsForDevice(device types.DevID) ([]Snapshot, error) {
+	return nil, nil
+}
+
+// ListAllSnapshots lists all snapshots from the database.
+func (d *Database) ListAllSnapshots() ([]Snapshot, error) {
+	return nil, nil
+}
+
+// CreateSnapshot creates a new snapshot entity inside the database.
+func (d *Database) CreateSnapshot(devices []types.DevID) (Snapshot, error) {
+	return Snapshot{}, nil
+}
+
+// DeleteSnapshot deletes a snapshot entity from the databse.
+func (d *Database) DeleteSnapshot(snapshotID uint64) error {
+	return nil
+}
+
+// GetSnapStore fetches one snap store entity from the database.
+func (d *Database) GetSnapStore(storeID string) (SnapStore, error) {
+	return SnapStore{}, nil
+}
+
+// CreateSnapStore creates a new snap store entity inside the database.
+func (d *Database) CreateSnapStore(trackedDisk types.DevID, snapDevice string) (SnapStore, error) {
+	return SnapStore{}, nil
+}
+
+// AddFileToSnapStore associates one snap store file with a snap store, inside the database.
+func (d *Database) AddFileToSnapStore(snapStore SnapStore, file SnapStoreFile) error {
+	return nil
+}
+
+// GetSnapStoreFile gets one snap store file from the database.
+func (d *Database) GetSnapStoreFile(path string) (SnapStoreFile, error) {
+	return SnapStoreFile{}, nil
+}
+
+// ListSnapStoreFiles lists all snap store files in a particular snap store files location
+func (d *Database) ListSnapStoreFiles(location SnapStoreFilesLocation) ([]SnapStoreFile, error) {
+	return nil, nil
+}
+
+// ListAllSnapStoreFiles lists all snap store files we keep track off, regardless of location.
+func (d *Database) ListAllSnapStoreFiles() ([]SnapStoreFile, error) {
+	return nil, nil
+}
+
+// GetSnapStoreFilesLocation gets one snap store file location entity, identified by path, from the database.
+func (d *Database) GetSnapStoreFilesLocation(path string) (SnapStoreFilesLocation, error) {
+	return SnapStoreFilesLocation{}, nil
+}
+
+// CreateSnapStoreFileLocation creates a new snap store file location
+func (d *Database) CreateSnapStoreFileLocation(snapStore SnapStoreFilesLocation) (SnapStoreFilesLocation, error) {
+	return SnapStoreFilesLocation{}, nil
+}
+
+// ListSnapStoreFilesLocations lists all known snap store files locations.
+func (d *Database) ListSnapStoreFilesLocations() ([]SnapStoreFilesLocation, error) {
+	return nil, nil
 }
 
 // // CreateSnapshot creates a new snapshot object in the database.

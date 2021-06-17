@@ -144,6 +144,11 @@ type Config struct {
 	// on disks that do take part of the snapshotting process.
 	CoWDestination []string `toml:"cow_destination"`
 
+	// AutoInitPhysicalDisks if set tot true, will add all physical
+	// disks to tracking when service starts. Device mappers will be
+	// skipped, as well as any virtual devices (loop, ram, etc).
+	AutoInitPhysicalDisks bool `toml:"auto_init_physical_disks"`
+
 	cowDestinationDevicePaths []string
 }
 

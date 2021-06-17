@@ -3,7 +3,9 @@ package manager
 import (
 	"coriolis-veeam-bridge/apiserver/params"
 	"coriolis-veeam-bridge/config"
+	"coriolis-veeam-bridge/db"
 	"coriolis-veeam-bridge/internal/storage"
+	"coriolis-veeam-bridge/internal/util"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -20,6 +22,7 @@ func NewManager(cfg *config.Config) (*Snapshot, error) {
 
 type Snapshot struct {
 	cfg *config.Config
+	db  *db.Database
 	mux sync.Mutex
 }
 
@@ -116,6 +119,59 @@ func (m *Snapshot) ListDisks(includeVirtual bool) ([]params.BlockVolume, error) 
 	ret := make([]params.BlockVolume, len(devices))
 	for idx, val := range devices {
 		ret[idx] = internalBlockVolumeToParamsBlockVolume(val)
+	}
+	return ret, nil
+}
+
+func (m *Snapshot) AddSnapStoreLocation(path string) (params.SnapStoreLocation, error) {
+	return params.SnapStoreLocation{}, nil
+}
+
+func (m *Snapshot) GetSnapStoreFileLocation(path string) (params.SnapStoreLocation, error) {
+	dbSnapFileDestination, err := m.db.GetSnapStoreFilesLocation(path)
+	if err != nil {
+		return params.SnapStoreLocation{}, errors.Wrap(err, "fetching snap store location info")
+	}
+
+	fsInfo, err := util.GetFileSystemInfoFromPath(path)
+	if err != nil {
+		return params.SnapStoreLocation{}, errors.Wrap(err, "fetching filesystem info")
+	}
+
+	return params.SnapStoreLocation{
+		AllocatedCapacity: dbSnapFileDestination.AllocatedSize,
+		AvailableCapacity: fsInfo.BlocksAvailable * uint64(fsInfo.BlockSize),
+		TotalCapacity:     dbSnapFileDestination.TotalCapacity,
+		Path:              dbSnapFileDestination.Path,
+		DevicePath:        dbSnapFileDestination.DevicePath,
+		Major:             dbSnapFileDestination.Major,
+		Minor:             dbSnapFileDestination.Minor,
+	}, nil
+}
+
+func (m *Snapshot) ListAvailableSnapStoreLocations() ([]params.SnapStoreLocation, error) {
+	ret := make([]params.SnapStoreLocation, len(m.cfg.CoWDestination))
+
+	snapStoreFilesLocations, err := m.db.ListSnapStoreFilesLocations()
+	if err != nil {
+		return nil, errors.Wrap(err, "listing snap store files locations")
+	}
+
+	for idx, val := range snapStoreFilesLocations {
+		fsInfo, err := util.GetFileSystemInfoFromPath(val.Path)
+		if err != nil {
+			return nil, errors.Wrap(err, "fetching filesystem info")
+		}
+
+		ret[idx] = params.SnapStoreLocation{
+			AllocatedCapacity: val.AllocatedSize,
+			AvailableCapacity: fsInfo.BlocksAvailable * uint64(fsInfo.BlockSize),
+			TotalCapacity:     val.TotalCapacity,
+			Path:              val.Path,
+			DevicePath:        val.DevicePath,
+			Major:             val.Major,
+			Minor:             val.Minor,
+		}
 	}
 	return ret, nil
 }
