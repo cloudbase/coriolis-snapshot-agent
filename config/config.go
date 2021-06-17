@@ -7,11 +7,14 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/pkg/errors"
 
+	vErrors "coriolis-veeam-bridge/errors"
+	"coriolis-veeam-bridge/internal/storage"
 	"coriolis-veeam-bridge/internal/types"
 	"coriolis-veeam-bridge/internal/util"
 )
@@ -115,6 +118,20 @@ func (c *Config) CowDestinationDevices() []string {
 func (c *Config) Validate() error {
 	if c.DBFile == "" {
 		return fmt.Errorf("missing db_file")
+	}
+
+	parentDir := filepath.Dir(c.DBFile)
+	if _, err := os.Stat(parentDir); err != nil {
+		return errors.Wrapf(err, "db file parent dir %s does not exist", parentDir)
+	}
+
+	parentDirInfo, err := util.GetFileSystemInfoFromPath(parentDir)
+	if err != nil {
+		return errors.Wrap(err, "getting DB dir info")
+	}
+
+	if parentDirInfo.Type != storage.TMPFS_MAGIC {
+		return vErrors.NewValueError("database file path is not on a tmpfs filesystem")
 	}
 
 	if err := c.APIServer.Validate(); err != nil {

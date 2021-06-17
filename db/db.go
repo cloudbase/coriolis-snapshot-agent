@@ -1,12 +1,14 @@
 package db
 
 import (
-	"coriolis-veeam-bridge/internal/types"
 	"time"
 
 	"github.com/pkg/errors"
 	"github.com/timshannon/bolthold"
 	"go.etcd.io/bbolt"
+
+	vErrors "coriolis-veeam-bridge/errors"
+	"coriolis-veeam-bridge/internal/types"
 )
 
 // Open opens the database at path and returns a *bolt.DB object
@@ -48,7 +50,11 @@ func (d *Database) GetTrackedDisk(device types.DevID) (TrackedDisk, error) {
 
 // GetAllTrackedDisks fetches all tracked disk entities from the database.
 func (d *Database) GetAllTrackedDisks() ([]TrackedDisk, error) {
-	return nil, nil
+	var allTracked []TrackedDisk
+	if err := d.con.Find(&allTracked, bolthold.Where("ID").Eq("*")); err != nil {
+		return nil, errors.Wrap(err, "fetching db entries")
+	}
+	return allTracked, nil
 }
 
 // CreateTrackedDisk adds a new tracked disk entity to the database.
@@ -118,17 +124,32 @@ func (d *Database) ListAllSnapStoreFiles() ([]SnapStoreFile, error) {
 
 // GetSnapStoreFilesLocation gets one snap store file location entity, identified by path, from the database.
 func (d *Database) GetSnapStoreFilesLocation(path string) (SnapStoreFilesLocation, error) {
-	return SnapStoreFilesLocation{}, nil
+	var location SnapStoreFilesLocation
+	if err := d.con.FindOne(&location, bolthold.Where("Path").Eq(path)); err != nil {
+		if errors.Is(err, bolthold.ErrNotFound) {
+			return SnapStoreFilesLocation{}, vErrors.NewNotFoundError("path %s not found in db", path)
+		}
+		return SnapStoreFilesLocation{}, errors.Wrap(err, "finding location in db")
+	}
+	return location, nil
 }
 
 // CreateSnapStoreFileLocation creates a new snap store file location
 func (d *Database) CreateSnapStoreFileLocation(snapStore SnapStoreFilesLocation) (SnapStoreFilesLocation, error) {
-	return SnapStoreFilesLocation{}, nil
+	if err := d.con.Insert(bolthold.NextSequence(), &snapStore); err != nil {
+		return SnapStoreFilesLocation{}, errors.Wrap(err, "inserting new snap store location into db")
+	}
+	return snapStore, nil
 }
 
 // ListSnapStoreFilesLocations lists all known snap store files locations.
 func (d *Database) ListSnapStoreFilesLocations() ([]SnapStoreFilesLocation, error) {
-	return nil, nil
+	var allLocations []SnapStoreFilesLocation
+
+	if err := d.con.Find(&allLocations, bolthold.Where("ID").Eq("*")); err != nil {
+		return nil, errors.Wrap(err, "fetching db entries")
+	}
+	return allLocations, nil
 }
 
 // // CreateSnapshot creates a new snapshot object in the database.

@@ -148,3 +148,17 @@ func NewConflictError(msg string, a ...interface{}) error {
 type ConflictError struct {
 	baseError
 }
+
+// NewValueError returns a new ValueError
+func NewValueError(msg string, a ...interface{}) error {
+	return &ValueError{
+		baseError{
+			msg: fmt.Sprintf(msg, a...),
+		},
+	}
+}
+
+// ValueError is returned when a value is invalid.
+type ValueError struct {
+	baseError
+}

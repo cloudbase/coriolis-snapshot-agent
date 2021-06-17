@@ -109,8 +109,8 @@ func (m *Snapshot) listDisks(includeVirtual bool) ([]storage.BlockVolume, error)
 
 		ret = append(ret, val)
 	}
-	return ret, nil
 
+	return ret, nil
 }
 
 func (m *Snapshot) ListDisks(includeVirtual bool) ([]params.BlockVolume, error) {
@@ -126,6 +126,8 @@ func (m *Snapshot) ListDisks(includeVirtual bool) ([]params.BlockVolume, error) 
 	return ret, nil
 }
 
+// AddSnapStoreLocation creates a new snap store location. Locations hosted on a device
+// that is currently tracked, will err out.
 func (m *Snapshot) AddSnapStoreLocation(path string) (params.SnapStoreLocation, error) {
 	fsInfo, err := util.GetFileSystemInfoFromPath(path)
 	if err != nil {
