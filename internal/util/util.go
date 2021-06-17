@@ -34,6 +34,50 @@ type FileSystemInfo struct {
 	BlocksAvailable uint64
 }
 
+// FindAllInvolvedDevices accepts an array of device ids, and determins whether or
+// not they are part of a device mapper. If they are, all involved devices will be
+// returned as an array of device IDs.
+// We currently cannot safely allocate extents meant for CoW pages on a device mapper
+// due to the fact that Coriolis needs to synd disk data of raw physical disks, not
+// of individual partitions.
+func FindAllInvolvedDevices(devices []types.DevID) ([]string, error) {
+	var ret []string
+	allDevices, err := storage.BlockDeviceList(false)
+	if err != nil {
+		return nil, errors.Wrap(err, "fetching devices")
+	}
+
+	devicePaths := map[string]types.DevID{}
+	for _, val := range devices {
+		devPath, err := storage.FindDeviceByID(val.Major, val.Minor)
+		if err != nil {
+			return nil, errors.Wrap(err, "finding device path")
+		}
+		devicePaths[devPath] = val
+	}
+
+	for _, val := range allDevices {
+		found := false
+		if _, ok := devicePaths[val.Path]; ok {
+			ret = append(ret, val.Path)
+			found = true
+		} else {
+			for _, part := range val.Partitions {
+				if _, ok := devicePaths[part.Path]; ok {
+					ret = append(ret, val.Path)
+					found = true
+				}
+				break
+			}
+		}
+
+		if found && val.IsVirtual {
+			ret = append(ret, val.DeviceMapperSlaves...)
+		}
+	}
+	return ret, nil
+}
+
 // getBlockDeviceInfoFromFile returns info about the block device that hosts the
 // file.
 func GetBlockDeviceInfoFromFile(path string) (PhysicalDiskInfo, error) {

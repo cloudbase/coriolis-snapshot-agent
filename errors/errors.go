@@ -33,20 +33,10 @@ func (e ErrInvalidDevice) Error() string {
 }
 
 // NewInvalidDeviceErr returns a new ErrInvalidDevice
-func NewInvalidDeviceErr(msg string) error {
+func NewInvalidDeviceErr(msg string, a ...interface{}) error {
 	return &ErrInvalidDevice{
-		message: msg,
+		message: fmt.Sprintf(msg, a...),
 	}
-}
-
-// IsInvalidDevice checks if the supplied error is of type ErrInvalidDevice
-func IsInvalidDevice(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	_, ok := err.(*ErrInvalidDevice)
-	return ok
 }
 
 // ErrVolumeNotFound is returned when a particular volume was not found
@@ -59,20 +49,10 @@ func (e ErrVolumeNotFound) Error() string {
 }
 
 // NewVolumeNotFoundErr returns a new ErrVolumeNotFound
-func NewVolumeNotFoundErr(msg string) error {
+func NewVolumeNotFoundErr(msg string, a ...interface{}) error {
 	return &ErrVolumeNotFound{
-		message: msg,
+		message: fmt.Sprintf(msg, a...),
 	}
-}
-
-// IsVolumeNotFound checks if the supplied error is of type ErrVolumeNotFound
-func IsVolumeNotFound(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	_, ok := err.(*ErrVolumeNotFound)
-	return ok
 }
 
 // ErrOperationInterrupted is returned when an operation is interrupted
@@ -85,20 +65,10 @@ func (e ErrOperationInterrupted) Error() string {
 }
 
 // NewOperationInterruptedErr returns a new ErrOperationInterrupted error
-func NewOperationInterruptedErr(msg string) error {
+func NewOperationInterruptedErr(msg string, a ...interface{}) error {
 	return &ErrOperationInterrupted{
-		message: msg,
+		message: fmt.Sprintf(msg, a...),
 	}
-}
-
-// IsOperationInterrupted checks if the supplied error is of type ErrOperationInterrupted
-func IsOperationInterrupted(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	_, ok := err.(*ErrOperationInterrupted)
-	return ok
 }
 
 type baseError struct {
@@ -110,10 +80,10 @@ func (b *baseError) Error() string {
 }
 
 // NewUnauthorizedError returns a new UnauthorizedError
-func NewUnauthorizedError(msg string) error {
+func NewUnauthorizedError(msg string, a ...interface{}) error {
 	return &UnauthorizedError{
 		baseError{
-			msg: msg,
+			msg: fmt.Sprintf(msg, a...),
 		},
 	}
 }
@@ -124,10 +94,10 @@ type UnauthorizedError struct {
 }
 
 // NewNotFoundError returns a new NotFoundError
-func NewNotFoundError(msg string) error {
+func NewNotFoundError(msg string, a ...interface{}) error {
 	return &NotFoundError{
 		baseError{
-			msg: msg,
+			msg: fmt.Sprintf(msg, a...),
 		},
 	}
 }
@@ -138,10 +108,10 @@ type NotFoundError struct {
 }
 
 // NewInvalidSessionError returns a new InvalidSessionError
-func NewInvalidSessionError(msg string) error {
+func NewInvalidSessionError(msg string, a ...interface{}) error {
 	return &InvalidSessionError{
 		baseError{
-			msg: msg,
+			msg: fmt.Sprintf(msg, a...),
 		},
 	}
 }

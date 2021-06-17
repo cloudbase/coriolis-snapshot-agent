@@ -1,14 +1,17 @@
 package manager
 
 import (
-	"coriolis-veeam-bridge/apiserver/params"
-	"coriolis-veeam-bridge/config"
-	"coriolis-veeam-bridge/db"
-	"coriolis-veeam-bridge/internal/storage"
-	"coriolis-veeam-bridge/internal/util"
 	"sync"
 
 	"github.com/pkg/errors"
+
+	"coriolis-veeam-bridge/apiserver/params"
+	"coriolis-veeam-bridge/config"
+	"coriolis-veeam-bridge/db"
+	vErrors "coriolis-veeam-bridge/errors"
+	"coriolis-veeam-bridge/internal/storage"
+	"coriolis-veeam-bridge/internal/types"
+	"coriolis-veeam-bridge/internal/util"
 )
 
 func NewManager(cfg *config.Config) (*Snapshot, error) {
@@ -124,7 +127,70 @@ func (m *Snapshot) ListDisks(includeVirtual bool) ([]params.BlockVolume, error) 
 }
 
 func (m *Snapshot) AddSnapStoreLocation(path string) (params.SnapStoreLocation, error) {
-	return params.SnapStoreLocation{}, nil
+	fsInfo, err := util.GetFileSystemInfoFromPath(path)
+	if err != nil {
+		return params.SnapStoreLocation{}, errors.Wrap(err, "fetching filesystem info")
+	}
+
+	deviceInfo, err := util.GetBlockDeviceInfoFromFile(path)
+	if err != nil {
+		return params.SnapStoreLocation{}, errors.Wrap(err, "fetching device info")
+	}
+
+	devID := types.DevID{
+		Major: deviceInfo.Major,
+		Minor: deviceInfo.Minor,
+	}
+	allInvolvedDevices, err := util.FindAllInvolvedDevices([]types.DevID{devID})
+	if err != nil {
+		return params.SnapStoreLocation{}, errors.Wrap(err, "finding all devices")
+	}
+
+	allTrackedDisks, err := m.db.GetAllTrackedDisks()
+	if err != nil {
+		return params.SnapStoreLocation{}, errors.Wrap(err, "fetching tracked disks")
+	}
+
+	for _, tracked := range allTrackedDisks {
+		for _, involved := range allInvolvedDevices {
+			if involved == tracked.Path {
+				return params.SnapStoreLocation{}, vErrors.NewConflictError("location %s is on tracked disk %s", path, involved)
+			}
+		}
+	}
+
+	_, err = m.db.GetSnapStoreFilesLocation(path)
+	if err != nil {
+		if !errors.Is(err, vErrors.ErrNotFound) {
+			return params.SnapStoreLocation{}, errors.Wrap(err, "fetching snap store location info")
+		}
+	} else {
+		return params.SnapStoreLocation{}, vErrors.NewConflictError("location already exists")
+	}
+
+	newLocParams := db.SnapStoreFilesLocation{
+		Path:          path,
+		TotalCapacity: fsInfo.Blocks * uint64(fsInfo.BlockSize),
+		DevicePath:    deviceInfo.DevicePath,
+		Major:         deviceInfo.Major,
+		Minor:         deviceInfo.Minor,
+		Enabled:       true,
+	}
+
+	createdStore, err := m.db.CreateSnapStoreFileLocation(newLocParams)
+	if err != nil {
+		return params.SnapStoreLocation{}, errors.Wrap(err, "creating db entry")
+	}
+
+	return params.SnapStoreLocation{
+		AllocatedCapacity: createdStore.AllocatedSize,
+		AvailableCapacity: fsInfo.BlocksAvailable * uint64(fsInfo.BlockSize),
+		TotalCapacity:     createdStore.TotalCapacity,
+		Path:              createdStore.Path,
+		DevicePath:        createdStore.DevicePath,
+		Major:             createdStore.Major,
+		Minor:             createdStore.Minor,
+	}, nil
 }
 
 func (m *Snapshot) GetSnapStoreFileLocation(path string) (params.SnapStoreLocation, error) {

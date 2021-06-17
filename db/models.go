@@ -1,7 +1,8 @@
 package db
 
 type TrackedDisk struct {
-	Path  string `boltholdKey:"id"`
+	ID    string `boltholdKey:"id"`
+	Path  string
 	Major uint32
 	Minor uint32
 }

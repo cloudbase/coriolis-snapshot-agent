@@ -410,7 +410,7 @@ func BlockDeviceList(ignoreMounted bool) ([]BlockVolume, error) {
 	for _, val := range devList {
 		info, err := GetBlockDeviceInfo(val.Name())
 		if err != nil {
-			if veeamErrors.IsInvalidDevice(err) {
+			if errors.Is(err, veeamErrors.ErrInvalidDevice{}) {
 				continue
 			}
 			return ret, err
