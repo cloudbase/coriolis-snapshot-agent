@@ -16,7 +16,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	veeamErrors "coriolis-veeam-bridge/errors"
+	vErrors "coriolis-veeam-bridge/errors"
 )
 
 const (
@@ -355,7 +355,7 @@ func getBlockVolumeInfo(name string) (BlockVolume, error) {
 	volumeInfo, err := BlkIDProbe(devicePath)
 	// Not finding any info about a disk is not necesarily an error. It may just mean
 	// that the disk is raw, and was never synced.
-	if err != nil && err != veeamErrors.ErrNoInfo {
+	if err != nil && err != vErrors.ErrNoInfo {
 		return BlockVolume{}, errors.Wrap(err, "blkid probe failed")
 	}
 
@@ -422,8 +422,8 @@ func isValidDevice(name string) error {
 // about the device.
 func GetBlockDeviceInfo(name string) (BlockVolume, error) {
 	if err := isValidDevice(name); err != nil {
-		return BlockVolume{}, veeamErrors.NewInvalidDeviceErr(
-			fmt.Sprintf("%s not a exportable block device: %s", name, err))
+		return BlockVolume{}, vErrors.NewInvalidDeviceErr(
+			"%s not a exportable block device: %s", name, err)
 	}
 	info, err := getBlockVolumeInfo(name)
 	if err != nil {
@@ -445,7 +445,7 @@ func BlockDeviceList(ignoreMounted bool) ([]BlockVolume, error) {
 	for _, val := range devList {
 		info, err := GetBlockDeviceInfo(val.Name())
 		if err != nil {
-			if errors.Is(err, veeamErrors.ErrInvalidDevice{}) {
+			if errors.Is(err, &vErrors.ErrInvalidDevice{}) {
 				continue
 			}
 			return ret, err
@@ -485,6 +485,6 @@ func FindDeviceByID(major uint32, minor uint32) (string, error) {
 			}
 		}
 	}
-	return "", veeamErrors.NewNotFoundError(
+	return "", vErrors.NewNotFoundError(
 		fmt.Sprintf("could not find device [%d:%d]", major, minor))
 }

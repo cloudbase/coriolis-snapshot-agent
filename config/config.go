@@ -28,7 +28,7 @@ const (
 	// the application state in an ephemeral folder saves us the trouble
 	// of detecting a reboot and cleaning up stale data. We just recreate
 	// the database from scratch and initialize snap stores, tracking, etc.
-	DefaultDBFile = "/dev/shm/coriolis-veeam-bridge/veeam-bridge.db"
+	DefaultDBFile = "/var/run/coriolis-veeam-bridge/coriolis-veeam-bridge.db"
 
 	// DefaultListenPort is the default HTTPS listen port
 	DefaultListenPort = 8899

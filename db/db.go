@@ -44,7 +44,7 @@ type Database struct {
 }
 
 // GetTrackedDisk gets one tracked disk entity from the database
-func (d *Database) GetTrackedDisk(device types.DevID) (TrackedDisk, error) {
+func (d *Database) GetTrackedDisk(major, minor uint32) (TrackedDisk, error) {
 	return TrackedDisk{}, nil
 }
 
@@ -58,7 +58,7 @@ func (d *Database) GetAllTrackedDisks() ([]TrackedDisk, error) {
 }
 
 // CreateTrackedDisk adds a new tracked disk entity to the database.
-func (d *Database) CreateTrackedDisk(device types.DevID) (TrackedDisk, error) {
+func (d *Database) CreateTrackedDisk(device TrackedDisk) (TrackedDisk, error) {
 	return TrackedDisk{}, nil
 }
 

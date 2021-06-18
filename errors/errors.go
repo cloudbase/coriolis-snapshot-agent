@@ -28,6 +28,14 @@ type ErrInvalidDevice struct {
 	message string
 }
 
+func (b *ErrInvalidDevice) Is(target error) bool {
+	if target == nil {
+		return false
+	}
+	_, ok := target.(*ErrInvalidDevice)
+	return ok
+}
+
 func (e ErrInvalidDevice) Error() string {
 	return e.message
 }
@@ -44,6 +52,14 @@ type ErrVolumeNotFound struct {
 	message string
 }
 
+func (b *ErrVolumeNotFound) Is(target error) bool {
+	if target == nil {
+		return false
+	}
+	_, ok := target.(*ErrVolumeNotFound)
+	return ok
+}
+
 func (e ErrVolumeNotFound) Error() string {
 	return e.message
 }
@@ -58,6 +74,14 @@ func NewVolumeNotFoundErr(msg string, a ...interface{}) error {
 // ErrOperationInterrupted is returned when an operation is interrupted
 type ErrOperationInterrupted struct {
 	message string
+}
+
+func (b *ErrOperationInterrupted) Is(target error) bool {
+	if target == nil {
+		return false
+	}
+	_, ok := target.(*ErrOperationInterrupted)
+	return ok
 }
 
 func (e ErrOperationInterrupted) Error() string {
@@ -93,6 +117,14 @@ type UnauthorizedError struct {
 	baseError
 }
 
+func (b *UnauthorizedError) Is(target error) bool {
+	if target == nil {
+		return false
+	}
+	_, ok := target.(*UnauthorizedError)
+	return ok
+}
+
 // NewNotFoundError returns a new NotFoundError
 func NewNotFoundError(msg string, a ...interface{}) error {
 	return &NotFoundError{
@@ -105,6 +137,14 @@ func NewNotFoundError(msg string, a ...interface{}) error {
 // NotFoundError is returned when a resource is not found
 type NotFoundError struct {
 	baseError
+}
+
+func (b *NotFoundError) Is(target error) bool {
+	if target == nil {
+		return false
+	}
+	_, ok := target.(*NotFoundError)
+	return ok
 }
 
 // NewInvalidSessionError returns a new InvalidSessionError
@@ -121,6 +161,14 @@ type InvalidSessionError struct {
 	baseError
 }
 
+func (b *InvalidSessionError) Is(target error) bool {
+	if target == nil {
+		return false
+	}
+	_, ok := target.(*InvalidSessionError)
+	return ok
+}
+
 // NewBadRequestError returns a new BadRequestError
 func NewBadRequestError(msg string, a ...interface{}) error {
 	return &BadRequestError{
@@ -133,6 +181,14 @@ func NewBadRequestError(msg string, a ...interface{}) error {
 // BadRequestError is returned when a malformed request is received
 type BadRequestError struct {
 	baseError
+}
+
+func (b *BadRequestError) Is(target error) bool {
+	if target == nil {
+		return false
+	}
+	_, ok := target.(*BadRequestError)
+	return ok
 }
 
 // NewConflictError returns a new ConflictError
@@ -149,6 +205,14 @@ type ConflictError struct {
 	baseError
 }
 
+func (b *ConflictError) Is(target error) bool {
+	if target == nil {
+		return false
+	}
+	_, ok := target.(*ConflictError)
+	return ok
+}
+
 // NewValueError returns a new ValueError
 func NewValueError(msg string, a ...interface{}) error {
 	return &ValueError{
@@ -161,4 +225,12 @@ func NewValueError(msg string, a ...interface{}) error {
 // ValueError is returned when a value is invalid.
 type ValueError struct {
 	baseError
+}
+
+func (b *ValueError) Is(target error) bool {
+	if target == nil {
+		return false
+	}
+	_, ok := target.(*ValueError)
+	return ok
 }

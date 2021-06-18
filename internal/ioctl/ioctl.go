@@ -3,8 +3,10 @@ package ioctl
 /*
 #cgo CFLAGS: -I/usr/src/veeamsnap-5.0.0.0
 #include "veeamsnap_ioctl.h"
+#include <string.h>
+#include <stdlib.h>
 
-void setCBTInfo(struct cbt_info_s* cbtInfo, struct ioctl_tracking_collect_s* collect) {
+void setCBTInfo(struct ioctl_tracking_collect_s* collect, struct cbt_info_s* cbtInfo) {
 	collect->p_cbt_info = cbtInfo;
 }
 
@@ -30,6 +32,19 @@ void setSnapStoreFileMultiDevRanges(struct ioctl_snapstore_file_add_multidev_s* 
 
 void setCBTBitmapBuffer(struct ioctl_tracking_read_cbt_bitmap_s* cbtBitmapParams, unsigned char* buff) {
 	cbtBitmapParams->buff = buff;
+}
+
+int get_values(struct cbt_info_s *vals, int idx, unsigned int size, struct cbt_info_s *converted) {
+	if (idx > size-1) {
+		return -1;
+	}
+	converted->dev_id = vals[idx].dev_id;
+	converted->dev_capacity = vals[idx].dev_capacity;
+	converted->cbt_map_size = vals[idx].cbt_map_size;
+	converted->snap_number = vals[idx].snap_number;
+	memcpy(converted->generationId, vals[idx].generationId, 16);
+
+	return 0;
 }
 */
 import "C"
@@ -75,38 +90,52 @@ func goToCUUID(uuid [16]byte) (cUUID [16]C.uchar) {
 // of the bitmap your snapshot coresponds to, you will need to use the GenerationID field
 // of the types.CBTInfo struct. IF what you saved in your application does not match the
 // GenerationID returned here, you *must* do a full sync.
-func GetCBTInfo(device []types.DevID) ([]types.CBTInfo, error) {
+func GetCBTInfo() ([]types.CBTInfo, error) {
 	dev, err := os.OpenFile(VEEAM_DEV, os.O_RDWR, 0600)
 	if err != nil {
 		return nil, errors.Wrap(err, "opening veeamsnap")
 	}
 	defer dev.Close()
 
-	cbtInfo := make([]C.struct_cbt_info_s, len(device))
-	for idx, val := range device {
-		cbtInfo[idx] = C.struct_cbt_info_s{
-			dev_id: C.struct_ioctl_dev_id_s{
-				major: C.int(val.Major),
-				minor: C.int(val.Minor),
-			},
-		}
+	// Get tracked disks count
+	trackingCollectCount := C.struct_ioctl_tracking_collect_s{
+		count: C.uint(0),
 	}
-	trackingCollect := C.struct_ioctl_tracking_collect_s{
-		count: C.uint(len(device)),
-	}
-	C.setCBTInfo(&cbtInfo[0], &trackingCollect)
 
-	r1, _, err := syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), IOCTL_TRACKING_COLLECT, uintptr(unsafe.Pointer(&trackingCollect)))
+	r1, _, err := syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), IOCTL_TRACKING_COLLECT, uintptr(unsafe.Pointer(&trackingCollectCount)))
 	if r1 != 0 {
 		return nil, errors.Wrap(err, "running ioctl")
 	}
 
-	cbtInfoRet := make([]types.CBTInfo, len(cbtInfo))
-	for idx, val := range cbtInfo {
+	size := C.ulong(C.sizeof_struct_cbt_info_s * trackingCollectCount.count)
+	buffer := C.malloc(size)
+	defer C.free(unsafe.Pointer(buffer))
+
+	var cbtInfo *C.struct_cbt_info_s = (*C.struct_cbt_info_s)(buffer)
+
+	trackingCollect := C.struct_ioctl_tracking_collect_s{
+		count: trackingCollectCount.count,
+	}
+	C.setCBTInfo(&trackingCollect, cbtInfo)
+
+	r1, _, err = syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), IOCTL_TRACKING_COLLECT, uintptr(unsafe.Pointer(&trackingCollect)))
+	if r1 != 0 {
+		return nil, errors.Wrap(err, "running ioctl")
+	}
+
+	var cbtInfoRet []types.CBTInfo
+
+	for i := 0; i < int(trackingCollectCount.count); i++ {
+		var val C.struct_cbt_info_s
+		if ret := C.get_values(cbtInfo, C.int(i), trackingCollectCount.count, &val); ret != 0 {
+			return nil, fmt.Errorf("failed to fetch")
+		}
+
 		var generationID [16]byte
 		data := C.GoBytes(unsafe.Pointer(&val.generationId[0]), C.int(16))
 		copy(generationID[:], data)
-		cbtInfoRet[idx] = types.CBTInfo{
+
+		cbtInfoRet = append(cbtInfoRet, types.CBTInfo{
 			DevID: types.DevID{
 				Major: uint32(val.dev_id.major),
 				Minor: uint32(val.dev_id.minor),
@@ -115,7 +144,7 @@ func GetCBTInfo(device []types.DevID) ([]types.CBTInfo, error) {
 			CBTMapSize:   uint32(val.cbt_map_size),
 			SnapNumber:   byte(val.snap_number),
 			GenerationID: generationID,
-		}
+		})
 	}
 
 	return cbtInfoRet, nil
@@ -174,9 +203,17 @@ func GetTrackingBlockSize() (blkSize uint32, err error) {
 }
 
 func GetCBTBitmap(device types.DevID) (types.TrackingReadCBTBitmap, error) {
-	cbtInfo, err := GetCBTInfo([]types.DevID{device})
+	cbtInfo, err := GetCBTInfo()
 	if err != nil {
 		return types.TrackingReadCBTBitmap{}, errors.Wrap(err, "fetching bitmap")
+	}
+
+	var deviceCBTInfo types.CBTInfo
+	for _, val := range cbtInfo {
+		if val.DevID.Major == device.Major && val.DevID.Minor == device.Minor {
+			deviceCBTInfo = val
+			break
+		}
 	}
 
 	dev, err := os.OpenFile(VEEAM_DEV, os.O_RDWR, 0600)
@@ -185,23 +222,23 @@ func GetCBTBitmap(device types.DevID) (types.TrackingReadCBTBitmap, error) {
 	}
 	defer dev.Close()
 
-	buff := make([]C.uchar, cbtInfo[0].CBTMapSize)
+	buff := make([]C.uchar, deviceCBTInfo.CBTMapSize)
 
 	cbtBitmapParams := C.struct_ioctl_tracking_read_cbt_bitmap_s{
 		dev_id: C.struct_ioctl_dev_id_s{
 			major: C.int(device.Major),
 			minor: C.int(device.Minor),
 		},
-		length: C.uint(cbtInfo[0].CBTMapSize),
+		length: C.uint(deviceCBTInfo.CBTMapSize),
 	}
 	C.setCBTBitmapBuffer(&cbtBitmapParams, &buff[0])
 
 	r1, _, err := syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), IOCTL_TRACKING_READ_CBT_BITMAP, uintptr(unsafe.Pointer(&cbtBitmapParams)))
-	if uint32(r1) != cbtInfo[0].CBTMapSize {
+	if uint32(r1) != deviceCBTInfo.CBTMapSize {
 		return types.TrackingReadCBTBitmap{}, errors.Wrap(err, "running ioctl")
 	}
 
-	goBuff := make([]byte, cbtInfo[0].CBTMapSize)
+	goBuff := make([]byte, deviceCBTInfo.CBTMapSize)
 
 	for idx, val := range buff {
 		goBuff[idx] = byte(val)
