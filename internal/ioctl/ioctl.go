@@ -460,40 +460,48 @@ func DeleteSnapshot(snapshotID uint64) error {
 }
 
 // Snapshot images
-func CollectSnapshotImages(device types.DevID) (types.SnapshotImages, error) {
+func CollectSnapshotImages() (types.SnapshotImages, error) {
 	dev, err := os.OpenFile(VEEAM_DEV, os.O_RDWR, 0600)
 	if err != nil {
 		return types.SnapshotImages{}, errors.Wrap(err, "opening veeamsnap")
 	}
 	defer dev.Close()
 
-	infoArr := [MaxSnapshotImages]C.struct_image_info_s{}
-	for i := 0; i < MaxSnapshotImages; i++ {
-		infoArr[i] = C.struct_image_info_s{
-			original_dev_id: C.struct_ioctl_dev_id_s{
-				major: C.int(device.Major),
-				minor: C.int(device.Minor),
-			},
-		}
+	// Get total number of images
+	snapImgsCount := C.struct_ioctl_collect_shapshot_images_s{
+		count: 0,
+	}
+	r1, _, err := syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), IOCTL_COLLECT_SNAPSHOT_IMAGES, uintptr(unsafe.Pointer(&snapImgsCount)))
+	if r1 != 0 && err != syscall.ENODATA {
+		// ENODATA is to be expected, as we are only fetching the number of
+		// images. Anything else, should be treated as an error.
+		return types.SnapshotImages{}, errors.Wrap(err, "running ioctl")
 	}
 
+	if snapImgsCount.count == 0 {
+		// No images available.
+		return types.SnapshotImages{}, nil
+	}
+
+	// Fetch image info.
+	infoArr := make([]C.struct_image_info_s, snapImgsCount.count)
 	snapImgs := C.struct_ioctl_collect_shapshot_images_s{
-		count: MaxSnapshotImages,
+		count: snapImgsCount.count,
 	}
 	C.setSnapshotImages(&snapImgs, &infoArr[0])
 
-	r1, _, err := syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), IOCTL_COLLECT_SNAPSHOT_IMAGES, uintptr(unsafe.Pointer(&snapImgs)))
+	r1, _, err = syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), IOCTL_COLLECT_SNAPSHOT_IMAGES, uintptr(unsafe.Pointer(&snapImgs)))
 	if r1 != 0 {
 		return types.SnapshotImages{}, errors.Wrap(err, "running ioctl")
 	}
 
 	convertedImgInfo := []types.ImageInfo{}
 	for _, val := range infoArr {
-		if uint32(val.snapshot_dev_id.major) == 0 && uint32(val.snapshot_dev_id.minor) == 0 {
-			break
-		}
 		convertedImgInfo = append(convertedImgInfo, types.ImageInfo{
-			OriginalDevID: device,
+			OriginalDevID: types.DevID{
+				Major: uint32(val.original_dev_id.major),
+				Minor: uint32(val.original_dev_id.minor),
+			},
 			SnapshotDevID: types.DevID{
 				Major: uint32(val.snapshot_dev_id.major),
 				Minor: uint32(val.snapshot_dev_id.minor),

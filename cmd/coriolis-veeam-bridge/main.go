@@ -69,18 +69,18 @@ func main() {
 	// }
 	// snapDevice := types.DevID{
 	// 	Major: 252,
-	// 	Minor: 17,
+	// 	Minor: 16,
 	// }
 
-	// snap_file := "/mnt/snapstores/veeam_file"
-	// // snap_file2 := "/mnt/snapstores/veeam_file_vdc"
+	// snap_file := "/mnt/snapstores/snapstore_files/snapdata"
+	// snap_file2 := "/mnt/snapstores/snapstore_files/snapdata2"
 
 	// snapStore, err := ioctl.CreateSnapStore([]types.DevID{params}, snapDevice)
 	// if err != nil {
 	// 	log.Fatal(err)
 	// }
 
-	// snapStore2, err := ioctl.CreateSnapStore([]types.DevID{params}, snapDevice)
+	// snapStore2, err := ioctl.CreateSnapStore([]types.DevID{params2}, snapDevice)
 	// if err != nil {
 	// 	log.Fatal(err)
 	// }
@@ -101,6 +101,7 @@ func main() {
 	// }
 
 	// cbtInfo, err := ioctl.GetCBTInfo()
+
 	info, err := ioctl.GetCBTInfo()
 	if err != nil {
 		fmt.Printf("%+v\n", err)
@@ -108,6 +109,9 @@ func main() {
 	}
 
 	fmt.Println(info)
+
+	imgs, err := ioctl.CollectSnapshotImages()
+	fmt.Printf(">>> %v --> %+v\n", imgs, err)
 
 	// js, _ := json.MarshalIndent(cbtInfo, "", "  ")
 	// fmt.Println(string(js))
