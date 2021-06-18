@@ -17,56 +17,10 @@ import (
 )
 
 // NewAPIController returns a new instance of APIController
-func NewAPIController(cfg *config.Config) (*APIController, error) {
-	if err := cfg.Validate(); err != nil {
-		return nil, errors.Wrap(err, "validating config")
-	}
-
-	mgr, err := manager.NewManager(cfg)
-	if err != nil {
-		return nil, errors.Wrap(err, "opening database")
-	}
+func NewAPIController(mgr *manager.Snapshot) (*APIController, error) {
 	return &APIController{
-		cfg: cfg,
 		mgr: mgr,
 	}, nil
-}
-
-func parseBoolParam(arg string, defaultValue bool) bool {
-	if arg == "" {
-		return defaultValue
-	}
-	parsed, _ := strconv.ParseBool(arg)
-	return parsed
-}
-
-func handleError(w http.ResponseWriter, err error) {
-	w.Header().Add("Content-Type", "application/json")
-	origErr := errors.Cause(err)
-	apiErr := params.APIErrorResponse{
-		Details: origErr.Error(),
-	}
-
-	switch origErr.(type) {
-	case *gErrors.NotFoundError:
-		w.WriteHeader(http.StatusNotFound)
-		apiErr.Error = "Not Found"
-	case *gErrors.UnauthorizedError:
-		w.WriteHeader(http.StatusUnauthorized)
-		apiErr.Error = "Not Authorized"
-	case *gErrors.BadRequestError:
-		w.WriteHeader(http.StatusBadRequest)
-		apiErr.Error = "Bad Request"
-	case *gErrors.ConflictError:
-		w.WriteHeader(http.StatusConflict)
-		apiErr.Error = "Conflict"
-	default:
-		log.Printf("Unhandled error: %+v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		apiErr.Error = "Server error"
-	}
-
-	json.NewEncoder(w).Encode(apiErr)
 }
 
 // APIController implements all API handlers.
@@ -148,6 +102,43 @@ func (a *APIController) ListSnapStoreHandler(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	json.NewEncoder(w).Encode(snapStores)
+}
+
+func parseBoolParam(arg string, defaultValue bool) bool {
+	if arg == "" {
+		return defaultValue
+	}
+	parsed, _ := strconv.ParseBool(arg)
+	return parsed
+}
+
+func handleError(w http.ResponseWriter, err error) {
+	w.Header().Add("Content-Type", "application/json")
+	origErr := errors.Cause(err)
+	apiErr := params.APIErrorResponse{
+		Details: origErr.Error(),
+	}
+
+	switch origErr.(type) {
+	case *gErrors.NotFoundError:
+		w.WriteHeader(http.StatusNotFound)
+		apiErr.Error = "Not Found"
+	case *gErrors.UnauthorizedError:
+		w.WriteHeader(http.StatusUnauthorized)
+		apiErr.Error = "Not Authorized"
+	case *gErrors.BadRequestError:
+		w.WriteHeader(http.StatusBadRequest)
+		apiErr.Error = "Bad Request"
+	case *gErrors.ConflictError:
+		w.WriteHeader(http.StatusConflict)
+		apiErr.Error = "Conflict"
+	default:
+		log.Printf("Unhandled error: %+v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		apiErr.Error = "Server error"
+	}
+
+	json.NewEncoder(w).Encode(apiErr)
 }
 
 // // GetVMHandler gets information about a single VM.

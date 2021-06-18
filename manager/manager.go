@@ -24,6 +24,12 @@ import (
 	"coriolis-veeam-bridge/internal/util"
 )
 
+type NotificationType string
+
+var (
+	SnapStoreCreateEvent NotificationType = "snapStoreCreate"
+)
+
 func NewManager(cfg *config.Config) (manager *Snapshot, err error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
@@ -44,15 +50,15 @@ func NewManager(cfg *config.Config) (manager *Snapshot, err error) {
 	}
 
 	snapshotMaganer := &Snapshot{
-		cfg: cfg,
-		db:  database,
+		cfg:            cfg,
+		db:             database,
+		notifyChannels: map[NotificationType][]chan interface{}{},
 	}
 	if dbNeedsInit {
 		defer func() {
 			// The database requires init, but we failed to initialize
 			// state on first run. Delete the newly created DB file, which
-			// is not yet properly set up, due to an error returned by one
-			// of the bellow functions.
+			// is not yet properly set up.
 			if err != nil && dbNeedsInit {
 				os.Remove(cfg.DBFile)
 			}
@@ -73,14 +79,46 @@ func NewManager(cfg *config.Config) (manager *Snapshot, err error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "auto adding physical disks to tracking")
 	}
-
+	if err := snapshotMaganer.initializeSnapStoreStorageWatcher(); err != nil {
+		return nil, errors.Wrap(err, "initializing storage worker")
+	}
 	return snapshotMaganer, nil
 }
 
 type Snapshot struct {
-	cfg *config.Config
-	db  *db.Database
+	cfg            *config.Config
+	db             *db.Database
+	notifyChannels map[NotificationType][]chan interface{}
+
 	mux sync.Mutex
+}
+
+func (m *Snapshot) RegisterNotificationChannel(notifyType NotificationType, ch chan interface{}) {
+	m.mux.Lock()
+	defer m.mux.Unlock()
+	log.Printf("registering new notification channel for %s", notifyType)
+	_, ok := m.notifyChannels[notifyType]
+	if !ok {
+		m.notifyChannels[notifyType] = []chan interface{}{
+			ch,
+		}
+	} else {
+		m.notifyChannels[notifyType] = append(m.notifyChannels[notifyType], ch)
+	}
+}
+
+func (m *Snapshot) SendNotify(notifyType NotificationType, payload interface{}) {
+	notify, ok := m.notifyChannels[notifyType]
+	if !ok {
+		return
+	}
+	if len(notify) == 0 {
+		return
+	}
+
+	for _, val := range notify {
+		val <- payload
+	}
 }
 
 // internalBlockVolumeToParamsBlockVolume converts an internal block volume
@@ -495,12 +533,15 @@ func (m *Snapshot) CreateSnapStore(param params.CreateSnapStoreRequest) (params.
 		panic("returned snap store ID missmatch")
 	}
 
-	return params.SnapStoreResponse{
+	snapStoreRet := params.SnapStoreResponse{
 		ID:                 store.SnapStoreID,
 		TrackedDiskID:      store.TrackedDisk.TrackingID,
 		StorageLocationID:  store.StorageLocation.TrackingID,
 		TotalAllocatedSize: store.TotalAllocatedSize,
-	}, nil
+	}
+
+	m.SendNotify(SnapStoreCreateEvent, snapStoreRet)
+	return snapStoreRet, nil
 }
 
 func (m *Snapshot) ListSnapStores() ([]params.SnapStoreResponse, error) {
@@ -531,6 +572,10 @@ func (m *Snapshot) ListSnapStores() ([]params.SnapStoreResponse, error) {
 		}
 	}
 	return resp, nil
+}
+
+func (m *Snapshot) CreateSnapshot(param params.CreateSnapshotRequest) error {
+	return nil
 }
 
 // Init functions.
@@ -614,6 +659,18 @@ func (m *Snapshot) addSnapStoreFilesLocations() error {
 				return errors.Wrap(err, "creating snap store location")
 			}
 		}
+	}
+	return nil
+}
+
+func (m *Snapshot) initializeSnapStoreStorageWatcher() error {
+	stores, err := m.ListSnapStores()
+	if err != nil {
+		return errors.Wrap(err, "initializing snap storage worker")
+	}
+
+	for _, store := range stores {
+		m.SendNotify(SnapStoreCreateEvent, store)
 	}
 	return nil
 }

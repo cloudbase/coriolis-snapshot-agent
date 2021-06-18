@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"net/http"
@@ -11,7 +12,9 @@ import (
 	"coriolis-veeam-bridge/apiserver/controllers"
 	"coriolis-veeam-bridge/apiserver/routers"
 	"coriolis-veeam-bridge/config"
+	"coriolis-veeam-bridge/manager"
 	"coriolis-veeam-bridge/util"
+	"coriolis-veeam-bridge/worker"
 )
 
 var (
@@ -36,10 +39,23 @@ func main() {
 	}
 
 	log.SetOutput(logWriter)
+	ctx, cancel := context.WithCancel(context.Background())
 
-	controller, err := controllers.NewAPIController(cfg)
+	mgr, err := manager.NewManager(cfg)
 	if err != nil {
-		log.Fatalf("failed to create controller: %q", err)
+		log.Fatalf("failed to create manager: %q", err)
+	}
+
+	snapStorageWorker, err := worker.NewSnapStorageTracker(ctx, mgr)
+	if err != nil {
+		log.Fatalf("failed to create snap storage worker: %+v", err)
+	}
+	if err := snapStorageWorker.Start(); err != nil {
+		log.Fatalf("failed to start snap storage worker: %+v", err)
+	}
+	controller, err := controllers.NewAPIController(mgr)
+	if err != nil {
+		log.Fatalf("failed to create controller: %+v", err)
 	}
 
 	router := routers.NewAPIRouter(controller, logWriter)
@@ -65,6 +81,8 @@ func main() {
 	}()
 
 	<-stop
+	cancel()
+	snapStorageWorker.Wait()
 
 	// params := types.DevID{
 	// 	Major: 252,
