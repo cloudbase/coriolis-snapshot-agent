@@ -8,6 +8,8 @@ import (
 
 	"coriolis-veeam-bridge/apiserver/params"
 	"coriolis-veeam-bridge/manager"
+
+	"github.com/pkg/errors"
 )
 
 func NewSnapStorageTracker(ctx context.Context, mgr *manager.Snapshot) (*SnapStoreTracker, error) {
@@ -36,6 +38,9 @@ type SnapStoreTracker struct {
 func (s *SnapStoreTracker) Start() error {
 	go s.notifyWorker()
 	go s.storageCapacityWatcher()
+	if err := s.mgr.PopulateSnapStoreWatcher(); err != nil {
+		return errors.Wrap(err, "getting snap stores info")
+	}
 	return nil
 }
 
@@ -57,11 +62,21 @@ func (s *SnapStoreTracker) Wait() error {
 
 func (s *SnapStoreTracker) ensureStorageForSnapStore(store params.SnapStoreResponse) error {
 	// store, err := s.mgr.GetSnapStoreFilesLocation()
+	disk, err := s.mgr.GetTrackedDisk(store.TrackedDiskID)
+	if err != nil {
+		return errors.Wrap(err, "fetching disk")
+	}
+	log.Printf("disk %s has capacity %d", disk.Path, disk.Size)
+	snapStore, err := s.mgr.GetSnapStore(store.ID)
+	if err != nil {
+		return errors.Wrap(err, "fetching store info")
+	}
+	log.Printf("store %s has %d allocated bytes", snapStore.ID, snapStore.TotalAllocatedSize)
 	return nil
 }
 
 // storageCapacityWatcher is a worker that watches the usage of each snap store and automatically
-// adds more storage if needed. If a snap store runs out of storage, before we're done with a snapshot
+// adds more storage if needed. If a snap store runs out of storage before we're done with a snapshot,
 // all snapshots that use that snap store will become corrupt.
 func (s *SnapStoreTracker) storageCapacityWatcher() {
 	log.Printf("Starting snap storage usage watcher")

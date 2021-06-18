@@ -79,9 +79,6 @@ func NewManager(cfg *config.Config) (manager *Snapshot, err error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "auto adding physical disks to tracking")
 	}
-	if err := snapshotMaganer.initializeSnapStoreStorageWatcher(); err != nil {
-		return nil, errors.Wrap(err, "initializing storage worker")
-	}
 	return snapshotMaganer, nil
 }
 
@@ -574,6 +571,29 @@ func (m *Snapshot) ListSnapStores() ([]params.SnapStoreResponse, error) {
 	return resp, nil
 }
 
+func (m *Snapshot) GetSnapStore(storeID string) (params.SnapStoreResponse, error) {
+	store, err := m.db.GetSnapStore(storeID)
+	if err != nil {
+		return params.SnapStoreResponse{}, errors.Wrap(err, "fetcing snap store")
+	}
+	files, err := m.db.FindSnapStoreFiles(store.SnapStoreID)
+	if err != nil {
+		return params.SnapStoreResponse{}, errors.Wrap(err, "fetching snap store files")
+	}
+
+	var totalAllocated int64
+	for _, file := range files {
+		totalAllocated += file.Size
+	}
+	resp := params.SnapStoreResponse{
+		ID:                 store.SnapStoreID,
+		TrackedDiskID:      store.TrackedDisk.TrackingID,
+		StorageLocationID:  store.StorageLocation.TrackingID,
+		TotalAllocatedSize: totalAllocated,
+	}
+	return resp, nil
+}
+
 func (m *Snapshot) CreateSnapshot(param params.CreateSnapshotRequest) error {
 	return nil
 }
@@ -663,7 +683,7 @@ func (m *Snapshot) addSnapStoreFilesLocations() error {
 	return nil
 }
 
-func (m *Snapshot) initializeSnapStoreStorageWatcher() error {
+func (m *Snapshot) PopulateSnapStoreWatcher() error {
 	stores, err := m.ListSnapStores()
 	if err != nil {
 		return errors.Wrap(err, "initializing snap storage worker")

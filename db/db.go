@@ -115,7 +115,14 @@ func (d *Database) DeleteSnapshot(snapshotID uint64) error {
 
 // GetSnapStore fetches one snap store entity from the database.
 func (d *Database) GetSnapStore(storeID string) (SnapStore, error) {
-	return SnapStore{}, nil
+	var store SnapStore
+	if err := d.con.FindOne(&store, bolthold.Where("SnapStoreID").Eq(storeID)); err != nil {
+		if errors.Is(err, bolthold.ErrNotFound) {
+			return store, vErrors.NewNotFoundError("store ID %s not found in db", storeID)
+		}
+		return store, errors.Wrap(err, "finding location in db")
+	}
+	return store, nil
 }
 
 // ListSnapStores fetches all snap store entities from the database.
