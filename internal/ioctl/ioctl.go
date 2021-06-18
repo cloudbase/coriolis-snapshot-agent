@@ -50,8 +50,6 @@ int get_values(struct cbt_info_s *vals, int idx, unsigned int size, struct cbt_i
 import "C"
 
 import (
-	"coriolis-veeam-bridge/internal/types"
-	"coriolis-veeam-bridge/internal/util"
 	"fmt"
 	"os"
 	"syscall"
@@ -59,10 +57,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
-)
 
-const (
-	MaxSnapshotImages = 255
+	"coriolis-veeam-bridge/internal/types"
+	"coriolis-veeam-bridge/internal/util"
 )
 
 func cToGoUUID(uuid [16]C.uchar) (goUUID [16]byte) {
@@ -188,13 +185,14 @@ func RemoveDeviceFromTracking(device types.DevID) error {
 	return nil
 }
 
-func GetTrackingBlockSize() (blkSize uint32, err error) {
+func GetTrackingBlockSize() (uint32, error) {
 	dev, err := os.OpenFile(VEEAM_DEV, os.O_RDWR, 0600)
 	if err != nil {
 		return 0, errors.Wrap(err, "opening veeamsnap")
 	}
 	defer dev.Close()
 
+	var blkSize uint32
 	r1, _, err := syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), IOCTL_TRACKING_BLOCK_SIZE, uintptr(unsafe.Pointer(&blkSize)))
 	if r1 != 0 {
 		return 0, errors.Wrap(err, "running ioctl")

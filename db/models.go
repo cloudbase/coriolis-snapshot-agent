@@ -1,10 +1,10 @@
 package db
 
 type TrackedDisk struct {
-	ID    string `boltholdKey:"id"`
-	Path  string
-	Major uint32
-	Minor uint32
+	TrackingID string
+	Path       string
+	Major      uint32
+	Minor      uint32
 }
 
 // SnapStore is the database representation of a veeamsnap snap store.
@@ -13,7 +13,7 @@ type TrackedDisk struct {
 // model. If it turns out to be a bad idea, we can switch later, as state
 // does not really persist across reboots.
 type SnapStore struct {
-	ID                 uint `boltholdKey:"id"`
+	ID                 string `boltholdKey:"id"`
 	SnapStoreID        string
 	TrackedDisk        TrackedDisk
 	TotalAllocatedSize int64
@@ -21,7 +21,7 @@ type SnapStore struct {
 
 // SnapStoreFilesLocation holds
 type SnapStoreFilesLocation struct {
-	ID uint `boltholdKey:"id"`
+	TrackingID string
 	// Path is the filesystem path where the snap store files will be
 	// created. This must coincide with items in the CoWDestination
 	// config value. This folder must be cleared of all pre-allocated
@@ -71,7 +71,7 @@ type SnapStoreFilesLocation struct {
 // now thinks those extents are free and can write files in those sectors.
 // This can lead both to file corruption and snapshot corruption.
 type SnapStoreFile struct {
-	ID                    uint `boltholdKey:"id"`
+	ID                    string `boltholdKey:"id"`
 	SnapStore             SnapStore
 	SnapStoreFileLocation SnapStoreFilesLocation
 	Path                  string
@@ -89,12 +89,12 @@ type Image struct {
 // veeamsnap can identify multiple disk snapshots, if multiple disks
 // were snapshot using a single ioctl call.
 type SnapshotTracker struct {
-	ID         uint `boltholdKey:"id"`
+	ID         string `boltholdKey:"id"`
 	SnapshotID uint64
 }
 
 type Snapshot struct {
-	ID      uint `boltholdKey:"id"`
+	ID      string `boltholdKey:"id"`
 	Tracker SnapshotTracker
 	// Generation ID is recorded in the CBT bitmap
 	// of each device that is being snapshot.

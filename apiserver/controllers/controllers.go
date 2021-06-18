@@ -2,10 +2,12 @@ package controllers
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
 
+	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
 
 	"coriolis-veeam-bridge/apiserver/params"
@@ -79,11 +81,39 @@ func (a *APIController) ListDisksHandler(w http.ResponseWriter, r *http.Request)
 	includeVirtual := parseBoolParam(includeVirtualArg, false)
 	disks, err := a.mgr.ListDisks(includeVirtual)
 	if err != nil {
-		log.Printf("failed to list virtual machines: %q", err)
+		log.Printf("failed to list disks: %q", err)
 		handleError(w, err)
 		return
 	}
 	json.NewEncoder(w).Encode(disks)
+}
+
+func (a *APIController) GetDiskHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	diskID, ok := vars["diskTrackingID"]
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	disk, err := a.mgr.GetTrackedDisk(diskID)
+	if err != nil {
+		log.Printf("failed to get disk: %q", err)
+		fmt.Printf("%+v\n", err)
+		handleError(w, err)
+		return
+	}
+	json.NewEncoder(w).Encode(disk)
+}
+
+func (a *APIController) ListSnapStoreLocations(w http.ResponseWriter, r *http.Request) {
+	locations, err := a.mgr.ListAvailableSnapStoreLocations()
+	if err != nil {
+		log.Printf("failed to list virtual machines: %q", err)
+		handleError(w, err)
+		return
+	}
+	json.NewEncoder(w).Encode(locations)
 }
 
 // // GetVMHandler gets information about a single VM.

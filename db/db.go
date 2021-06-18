@@ -1,8 +1,10 @@
 package db
 
 import (
+	"regexp"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/timshannon/bolthold"
 	"go.etcd.io/bbolt"
@@ -45,21 +47,40 @@ type Database struct {
 
 // GetTrackedDisk gets one tracked disk entity from the database
 func (d *Database) GetTrackedDisk(major, minor uint32) (TrackedDisk, error) {
-	return TrackedDisk{}, nil
+	var trackedDisk TrackedDisk
+
+	if err := d.con.FindOne(&trackedDisk, bolthold.Where("Major").Eq(major).And("Minor").Eq(minor)); err != nil {
+		return TrackedDisk{}, errors.Wrap(err, "fetching db entries")
+	}
+	return trackedDisk, nil
+}
+
+// GetTrackedDisk gets one tracked disk entity from the database
+func (d *Database) GetTrackedDiskByTrackingID(trackingID string) (TrackedDisk, error) {
+	var trackedDisk []TrackedDisk
+
+	if err := d.con.Find(&trackedDisk, bolthold.Where("TrackingID").Eq(trackingID)); err != nil {
+		return TrackedDisk{}, errors.Wrap(err, "fetching tracked disk by id")
+	}
+	return trackedDisk[0], nil
 }
 
 // GetAllTrackedDisks fetches all tracked disk entities from the database.
 func (d *Database) GetAllTrackedDisks() ([]TrackedDisk, error) {
 	var allTracked []TrackedDisk
-	if err := d.con.Find(&allTracked, bolthold.Where("ID").Eq("*")); err != nil {
-		return nil, errors.Wrap(err, "fetching db entries")
+	re := regexp.MustCompile(".*")
+	if err := d.con.Find(&allTracked, bolthold.Where("TrackingID").RegExp(re)); err != nil {
+		return nil, errors.Wrap(err, "fetching all tracked disks")
 	}
 	return allTracked, nil
 }
 
 // CreateTrackedDisk adds a new tracked disk entity to the database.
 func (d *Database) CreateTrackedDisk(device TrackedDisk) (TrackedDisk, error) {
-	return TrackedDisk{}, nil
+	if err := d.con.Insert(device.TrackingID, &device); err != nil {
+		return TrackedDisk{}, errors.Wrap(err, "inserting new snap store location into db")
+	}
+	return device, nil
 }
 
 // RemoveTrackedDisk removes a tracked disk entity from the database.
@@ -125,6 +146,7 @@ func (d *Database) ListAllSnapStoreFiles() ([]SnapStoreFile, error) {
 // GetSnapStoreFilesLocation gets one snap store file location entity, identified by path, from the database.
 func (d *Database) GetSnapStoreFilesLocation(path string) (SnapStoreFilesLocation, error) {
 	var location SnapStoreFilesLocation
+
 	if err := d.con.FindOne(&location, bolthold.Where("Path").Eq(path)); err != nil {
 		if errors.Is(err, bolthold.ErrNotFound) {
 			return SnapStoreFilesLocation{}, vErrors.NewNotFoundError("path %s not found in db", path)
@@ -136,7 +158,9 @@ func (d *Database) GetSnapStoreFilesLocation(path string) (SnapStoreFilesLocatio
 
 // CreateSnapStoreFileLocation creates a new snap store file location
 func (d *Database) CreateSnapStoreFileLocation(snapStore SnapStoreFilesLocation) (SnapStoreFilesLocation, error) {
-	if err := d.con.Insert(bolthold.NextSequence(), &snapStore); err != nil {
+	newUUID := uuid.New()
+	snapStore.TrackingID = newUUID.String()
+	if err := d.con.Insert(newUUID.String(), &snapStore); err != nil {
 		return SnapStoreFilesLocation{}, errors.Wrap(err, "inserting new snap store location into db")
 	}
 	return snapStore, nil
@@ -146,7 +170,8 @@ func (d *Database) CreateSnapStoreFileLocation(snapStore SnapStoreFilesLocation)
 func (d *Database) ListSnapStoreFilesLocations() ([]SnapStoreFilesLocation, error) {
 	var allLocations []SnapStoreFilesLocation
 
-	if err := d.con.Find(&allLocations, bolthold.Where("ID").Eq("*")); err != nil {
+	re := regexp.MustCompile(".*")
+	if err := d.con.Find(&allLocations, bolthold.Where("TrackingID").RegExp(re)); err != nil {
 		return nil, errors.Wrap(err, "fetching db entries")
 	}
 	return allLocations, nil

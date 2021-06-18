@@ -1,10 +1,17 @@
 package main
 
 import (
-	"coriolis-veeam-bridge/config"
-	"coriolis-veeam-bridge/internal/ioctl"
 	"flag"
-	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+
+	"coriolis-veeam-bridge/apiserver/controllers"
+	"coriolis-veeam-bridge/apiserver/routers"
+	"coriolis-veeam-bridge/config"
+	"coriolis-veeam-bridge/util"
 )
 
 var (
@@ -12,52 +19,52 @@ var (
 )
 
 func main() {
-	// flag.Parse()
+	flag.Parse()
 
-	// stop := make(chan os.Signal, 2)
-	// signal.Notify(stop, syscall.SIGTERM)
-	// signal.Notify(stop, syscall.SIGINT)
+	stop := make(chan os.Signal, 2)
+	signal.Notify(stop, syscall.SIGTERM)
+	signal.Notify(stop, syscall.SIGINT)
 
-	// cfg, err := config.ParseConfig(*conf)
-	// if err != nil {
-	// 	log.Fatalf("failed to parse config %s: %q", *conf, err)
-	// }
+	cfg, err := config.ParseConfig(*conf)
+	if err != nil {
+		log.Fatalf("failed to parse config %s: %q", *conf, err)
+	}
 
-	// logWriter, err := util.GetLoggingWriter(cfg)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
+	logWriter, err := util.GetLoggingWriter(cfg)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	// log.SetOutput(logWriter)
+	log.SetOutput(logWriter)
 
-	// controller, err := controllers.NewAPIController(cfg)
-	// if err != nil {
-	// 	log.Fatalf("failed to create controller: %q", err)
-	// }
+	controller, err := controllers.NewAPIController(cfg)
+	if err != nil {
+		log.Fatalf("failed to create controller: %q", err)
+	}
 
-	// router := routers.NewAPIRouter(controller, logWriter)
+	router := routers.NewAPIRouter(controller, logWriter)
 
-	// tlsCfg, err := cfg.APIServer.TLSConfig.TLSConfig()
-	// if err != nil {
-	// 	log.Fatalf("failed to get TLS config: %q", err)
-	// }
+	tlsCfg, err := cfg.APIServer.TLSConfig.TLSConfig()
+	if err != nil {
+		log.Fatalf("failed to get TLS config: %q", err)
+	}
 
-	// srv := &http.Server{
-	// 	Addr:      cfg.APIServer.BindAddress(),
-	// 	TLSConfig: tlsCfg,
-	// 	// Pass our instance of gorilla/mux in.
-	// 	Handler: router,
-	// }
-	// go func() {
-	// 	if err := srv.ListenAndServeTLS(
-	// 		cfg.APIServer.TLSConfig.Cert,
-	// 		cfg.APIServer.TLSConfig.Key); err != nil {
+	srv := &http.Server{
+		Addr:      cfg.APIServer.BindAddress(),
+		TLSConfig: tlsCfg,
+		// Pass our instance of gorilla/mux in.
+		Handler: router,
+	}
+	go func() {
+		if err := srv.ListenAndServeTLS(
+			cfg.APIServer.TLSConfig.Cert,
+			cfg.APIServer.TLSConfig.Key); err != nil {
 
-	// 		log.Fatal(err)
-	// 	}
-	// }()
+			log.Fatal(err)
+		}
+	}()
 
-	// <-stop
+	<-stop
 
 	// params := types.DevID{
 	// 	Major: 252,
@@ -102,16 +109,16 @@ func main() {
 
 	// cbtInfo, err := ioctl.GetCBTInfo()
 
-	info, err := ioctl.GetCBTInfo()
-	if err != nil {
-		fmt.Printf("%+v\n", err)
-		return
-	}
+	// info, err := ioctl.GetCBTInfo()
+	// if err != nil {
+	// 	fmt.Printf("%+v\n", err)
+	// 	return
+	// }
 
-	fmt.Println(info)
+	// fmt.Println(info)
 
-	imgs, err := ioctl.CollectSnapshotImages()
-	fmt.Printf(">>> %v --> %+v\n", imgs, err)
+	// imgs, err := ioctl.CollectSnapshotImages()
+	// fmt.Printf(">>> %v --> %+v\n", imgs, err)
 
 	// js, _ := json.MarshalIndent(cbtInfo, "", "  ")
 	// fmt.Println(string(js))

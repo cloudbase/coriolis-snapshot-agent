@@ -107,6 +107,9 @@ type Partition struct {
 }
 
 type BlockVolume struct {
+	// TrackingID is the DB tracking Id added for this disk. A value of -1
+	// means it's not tracked.
+	TrackingID string `json:"id"`
 	// Path is the full path for this disk.
 	Path string `json:"path"`
 	// PartitionTableType is the partition table type
@@ -150,6 +153,7 @@ type BlockVolume struct {
 }
 
 type SnapStoreLocation struct {
+	ID string `json:"id"`
 	// AvailableCapacity is the amount of free disk space
 	// on a device. This value can be different from
 	// TotalCapacity - AllocatedCapacity, as there is no guarantee

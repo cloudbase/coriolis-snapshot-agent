@@ -11,11 +11,13 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
+	"github.com/timshannon/bolthold"
 
 	"coriolis-veeam-bridge/apiserver/params"
 	"coriolis-veeam-bridge/config"
 	"coriolis-veeam-bridge/db"
 	vErrors "coriolis-veeam-bridge/errors"
+	"coriolis-veeam-bridge/internal/ioctl"
 	"coriolis-veeam-bridge/internal/storage"
 	"coriolis-veeam-bridge/internal/types"
 	"coriolis-veeam-bridge/internal/util"
@@ -173,13 +175,118 @@ func (m *Snapshot) ListDisks(includeVirtual bool) ([]params.BlockVolume, error) 
 	ret := make([]params.BlockVolume, len(devices))
 	for idx, val := range devices {
 		ret[idx] = internalBlockVolumeToParamsBlockVolume(val)
+		exists, err := m.db.GetTrackedDisk(val.Major, val.Minor)
+		if err != nil {
+			if !errors.Is(err, bolthold.ErrNotFound) {
+				return nil, errors.Wrap(err, "fetching DB entries")
+			}
+		} else {
+			// We'll never have enough disks to overfllow.
+			ret[idx].TrackingID = exists.TrackingID
+		}
 	}
 	return ret, nil
 }
 
-// AddSnapStoreLocation creates a new snap store location. Locations hosted on a device
+func (m *Snapshot) GetTrackedDisk(diskID string) (params.BlockVolume, error) {
+	if diskID == "" {
+		return params.BlockVolume{}, vErrors.NewBadRequestError("invalid disk id")
+	}
+	disk, err := m.db.GetTrackedDiskByTrackingID(diskID)
+	if err != nil {
+		if errors.Is(err, bolthold.ErrNotFound) {
+			return params.BlockVolume{}, vErrors.NewNotFoundError("disk with id %s not found", diskID)
+		}
+		return params.BlockVolume{}, errors.Wrap(err, "fetching from db")
+	}
+
+	volume, err := m.findDiskByPath(disk.Path)
+	if err != nil {
+		return params.BlockVolume{}, errors.Wrap(err, "fetching disk")
+	}
+	ret := internalBlockVolumeToParamsBlockVolume(volume)
+	ret.TrackingID = disk.TrackingID
+	return ret, nil
+}
+
+func (m *Snapshot) findDiskByPath(path string) (storage.BlockVolume, error) {
+	disks, err := m.listDisks(true)
+	if err != nil {
+		return storage.BlockVolume{}, errors.Wrap(err, "fetching disk list")
+	}
+
+	for _, val := range disks {
+		if val.Path == path {
+			return val, nil
+		}
+	}
+
+	return storage.BlockVolume{}, vErrors.NewNotFoundError("could not find %s", path)
+}
+
+func (m *Snapshot) AddTrackedDisk(disk params.AddTrackedDiskRequest) (params.BlockVolume, error) {
+	m.mux.Lock()
+	defer m.mux.Unlock()
+
+	volume, err := m.findDiskByPath(disk.DevicePath)
+	if err != nil {
+		return params.BlockVolume{}, errors.Wrap(err, "fetching disk")
+	}
+
+	if volume.Path == "" {
+		return params.BlockVolume{}, vErrors.NewNotFoundError("device %s not found", disk.DevicePath)
+	}
+
+	exists, err := m.db.GetTrackedDisk(volume.Major, volume.Minor)
+	if err != nil {
+		if !errors.Is(err, bolthold.ErrNotFound) {
+			return params.BlockVolume{}, errors.Wrap(err, "fetching DB entries")
+		}
+	}
+
+	cbtInfo, err := ioctl.GetCBTInfo()
+	if err != nil {
+		return params.BlockVolume{}, errors.Wrap(err, "fetching CBT info")
+	}
+
+	devID := types.DevID{
+		Major: volume.Major,
+		Minor: volume.Minor,
+	}
+
+	if !deviceIsTracked(volume.Major, volume.Minor, cbtInfo) {
+		log.Printf("Adding %s to tracking", volume.Path)
+		if err := ioctl.AddDeviceToTracking(devID); err != nil {
+			log.Printf("error adding %s to tracking: %s", volume.Path, err)
+			return params.BlockVolume{}, errors.Wrapf(err, "adding %s to tracking", volume.Path)
+		}
+	}
+
+	var dbObject db.TrackedDisk
+	if exists == (db.TrackedDisk{}) {
+		addDevParams := db.TrackedDisk{
+			TrackingID: filepath.Base(volume.Path),
+			Path:       volume.Path,
+			Major:      volume.Major,
+			Minor:      volume.Minor,
+		}
+
+		dbObject, err = m.db.CreateTrackedDisk(addDevParams)
+		if err != nil {
+			return params.BlockVolume{}, errors.Wrapf(err, "adding db entry for %s", volume.Path)
+		}
+	} else {
+		dbObject = exists
+	}
+
+	ret := internalBlockVolumeToParamsBlockVolume(volume)
+	ret.TrackingID = dbObject.TrackingID
+	return ret, nil
+}
+
+// AddSnapStoreFilesLocation creates a new snap store location. Locations hosted on a device
 // that is currently tracked, will err out.
-func (m *Snapshot) AddSnapStoreLocation(path string) (params.SnapStoreLocation, error) {
+func (m *Snapshot) AddSnapStoreFilesLocation(path string) (params.SnapStoreLocation, error) {
 	fsInfo, err := util.GetFileSystemInfoFromPath(path)
 	if err != nil {
 		return params.SnapStoreLocation{}, errors.Wrap(err, "fetching filesystem info")
@@ -236,6 +343,7 @@ func (m *Snapshot) AddSnapStoreLocation(path string) (params.SnapStoreLocation, 
 	}
 
 	return params.SnapStoreLocation{
+		ID:                createdStore.TrackingID,
 		AllocatedCapacity: createdStore.AllocatedSize,
 		AvailableCapacity: fsInfo.BlocksAvailable * uint64(fsInfo.BlockSize),
 		TotalCapacity:     createdStore.TotalCapacity,
@@ -246,7 +354,7 @@ func (m *Snapshot) AddSnapStoreLocation(path string) (params.SnapStoreLocation, 
 	}, nil
 }
 
-func (m *Snapshot) GetSnapStoreFileLocation(path string) (params.SnapStoreLocation, error) {
+func (m *Snapshot) GetSnapStoreFilesLocation(path string) (params.SnapStoreLocation, error) {
 	dbSnapFileDestination, err := m.db.GetSnapStoreFilesLocation(path)
 	if err != nil {
 		return params.SnapStoreLocation{}, errors.Wrap(err, "fetching snap store location info")
@@ -258,6 +366,7 @@ func (m *Snapshot) GetSnapStoreFileLocation(path string) (params.SnapStoreLocati
 	}
 
 	return params.SnapStoreLocation{
+		ID:                dbSnapFileDestination.TrackingID,
 		AllocatedCapacity: dbSnapFileDestination.AllocatedSize,
 		AvailableCapacity: fsInfo.BlocksAvailable * uint64(fsInfo.BlockSize),
 		TotalCapacity:     dbSnapFileDestination.TotalCapacity,
@@ -266,6 +375,31 @@ func (m *Snapshot) GetSnapStoreFileLocation(path string) (params.SnapStoreLocati
 		Major:             dbSnapFileDestination.Major,
 		Minor:             dbSnapFileDestination.Minor,
 	}, nil
+}
+
+func (m *Snapshot) ListSnapStoreFilesLocations() ([]params.SnapStoreLocation, error) {
+	locations, err := m.db.ListSnapStoreFilesLocations()
+	if err != nil {
+		return nil, errors.Wrap(err, "fetching snap store files locations")
+	}
+
+	ret := make([]params.SnapStoreLocation, len(locations))
+	for idx, val := range locations {
+		fsInfo, err := util.GetFileSystemInfoFromPath(val.Path)
+		if err != nil {
+			return nil, errors.Wrap(err, "fetching filesystem info")
+		}
+		ret[idx] = params.SnapStoreLocation{
+			AllocatedCapacity: val.AllocatedSize,
+			AvailableCapacity: fsInfo.BlocksAvailable * uint64(fsInfo.BlockSize),
+			TotalCapacity:     val.TotalCapacity,
+			Path:              val.Path,
+			DevicePath:        val.DevicePath,
+			Major:             val.Major,
+			Minor:             val.Minor,
+		}
+	}
+	return ret, nil
 }
 
 func (m *Snapshot) ListAvailableSnapStoreLocations() ([]params.SnapStoreLocation, error) {
@@ -283,6 +417,7 @@ func (m *Snapshot) ListAvailableSnapStoreLocations() ([]params.SnapStoreLocation
 		}
 
 		ret[idx] = params.SnapStoreLocation{
+			ID:                val.TrackingID,
 			AllocatedCapacity: val.AllocatedSize,
 			AvailableCapacity: fsInfo.BlocksAvailable * uint64(fsInfo.BlockSize),
 			TotalCapacity:     val.TotalCapacity,
@@ -344,14 +479,9 @@ func deviceIsTracked(major, minor uint32, cbtInfo []types.CBTInfo) bool {
 // initTrackedDisks will add all physical disks that do not take part in
 // hosting snap store files, to tracking.
 func (m *Snapshot) initTrackedDisks() (err error) {
-	m.mux.Lock()
-	defer m.mux.Unlock()
-
-	// cbtInfo, err := ioctl.GetCBTInfo()
-	// if err != nil {
-	// 	return errors.Wrap(err, "fetching CBT info")
-	// }
-
+	if !m.cfg.AutoInitPhysicalDisks {
+		return nil
+	}
 	// listDisks excludes disks configured as snap store destinations.
 	disks, err := m.listDisks(false)
 	if err != nil {
@@ -360,34 +490,13 @@ func (m *Snapshot) initTrackedDisks() (err error) {
 
 	for _, val := range disks {
 		log.Printf("checking disk %s\n", val.Path)
-		// devID := types.DevID{
-		// 	Major: val.Major,
-		// 	Minor: val.Minor,
-		// }
+		newDevParams := params.AddTrackedDiskRequest{
+			DevicePath: val.Path,
+		}
 
-		_, err = m.db.GetTrackedDisk(val.Major, val.Minor)
+		_, err = m.AddTrackedDisk(newDevParams)
 		if err != nil {
-			if !errors.Is(err, &vErrors.NotFoundError{}) {
-				return errors.Wrap(err, "checking tracked disk status")
-			}
-		}
-
-		// if !deviceIsTracked(val.Major, val.Minor, cbtInfo) {
-		// 	log.Printf("Adding %s to tracking", val.Path)
-		// 	if err := ioctl.AddDeviceToTracking(devID); err != nil {
-		// 		log.Printf("error adding %s to tracking: %s", val.Path, err)
-		// 		return errors.Wrapf(err, "adding %s to tracking", val.Path)
-		// 	}
-		// }
-
-		addDevParams := db.TrackedDisk{
-			Path:  val.Path,
-			Major: val.Major,
-			Minor: val.Minor,
-		}
-
-		if _, err := m.db.CreateTrackedDisk(addDevParams); err != nil {
-			return errors.Wrapf(err, "adding db entry for %s", val.Path)
+			return errors.Wrapf(err, "adding disk %s to tracking", val.Path)
 		}
 	}
 	return nil
@@ -397,7 +506,7 @@ func (m *Snapshot) initTrackedDisks() (err error) {
 // to the database.
 func (m *Snapshot) addSnapStoreFilesLocations() error {
 	for _, val := range m.cfg.CoWDestination {
-		if _, err := m.AddSnapStoreLocation(val); err != nil {
+		if _, err := m.AddSnapStoreFilesLocation(val); err != nil {
 			if !errors.Is(err, &vErrors.ConflictError{}) {
 				return errors.Wrap(err, "creating snap store location")
 			}
