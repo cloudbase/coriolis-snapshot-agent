@@ -45,9 +45,13 @@ func NewAPIRouter(han *controllers.APIController, logWriter io.Writer) *mux.Rout
 	apiRouter.Handle("/snapshots", log(logWriter, http.HandlerFunc(han.ListDisksHandler))).Methods("GET")
 	apiRouter.Handle("/snapshots/", log(logWriter, http.HandlerFunc(han.ListDisksHandler))).Methods("GET")
 
-	// snap store management. This endpoint supports only create and view openrations.
-	apiRouter.Handle("/snapstores", log(logWriter, http.HandlerFunc(han.ListSnapStoreLocations))).Methods("GET")
-	apiRouter.Handle("/snapstores/", log(logWriter, http.HandlerFunc(han.ListSnapStoreLocations))).Methods("GET")
+	// snap store management.
+	// Read snap stores
+	apiRouter.Handle("/snapstores", log(logWriter, http.HandlerFunc(han.ListSnapStoreHandler))).Methods("GET")
+	apiRouter.Handle("/snapstores/", log(logWriter, http.HandlerFunc(han.ListSnapStoreHandler))).Methods("GET")
+	// Create snap store
+	apiRouter.Handle("/snapstores", log(logWriter, http.HandlerFunc(han.CreateSnapStoreHandler))).Methods("POST")
+	apiRouter.Handle("/snapstores/", log(logWriter, http.HandlerFunc(han.CreateSnapStoreHandler))).Methods("POST")
 
 	apiRouter.Handle("/snapstorelocations", log(logWriter, http.HandlerFunc(han.ListSnapStoreLocations))).Methods("GET")
 	apiRouter.Handle("/snapstorelocations/", log(logWriter, http.HandlerFunc(han.ListSnapStoreLocations))).Methods("GET")

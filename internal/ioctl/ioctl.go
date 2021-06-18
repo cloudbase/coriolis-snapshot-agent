@@ -55,7 +55,6 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/google/uuid"
 	"github.com/pkg/errors"
 
 	"coriolis-veeam-bridge/internal/types"
@@ -265,15 +264,15 @@ func GetCBTBitmap(device types.DevID) (types.TrackingReadCBTBitmap, error) {
 // snap store, set the Major and Minor numbers of snapDevice to -1. Extents will be added using the
 // IOCTL_SNAPSTORE_FILE_MULTIDEV ioctl call. The parameters for this call, includes the device ID of
 // the volume and the extens on this device that will be allocated to the snap store.
-func CreateSnapStore(device []types.DevID, snapDevice types.DevID) (types.SnapStore, error) {
+func CreateSnapStore(storeID [16]byte, device []types.DevID, snapDevice types.DevID) (types.SnapStore, error) {
 	dev, err := os.OpenFile(VEEAM_DEV, os.O_RDWR, 0600)
 	if err != nil {
 		return types.SnapStore{}, errors.Wrap(err, "opening veeamsnap")
 	}
 	defer dev.Close()
 
-	newUUID := uuid.New()
-	uuidAsBytes := [16]byte(newUUID)
+	// newUUID := uuid.New()
+	// uuidAsBytes := [16]byte(newUUID)
 
 	devID := make([]C.struct_ioctl_dev_id_s, len(device))
 	for idx, val := range device {
@@ -283,7 +282,7 @@ func CreateSnapStore(device []types.DevID, snapDevice types.DevID) (types.SnapSt
 		}
 	}
 	snapStore := C.struct_ioctl_snapstore_create_s{
-		id:    goToCUUID(uuidAsBytes),
+		id:    goToCUUID(storeID),
 		count: 1,
 	}
 	if snapDevice.Major != 0 && snapDevice.Minor != 0 {

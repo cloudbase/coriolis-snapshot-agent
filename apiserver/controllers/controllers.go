@@ -116,6 +116,40 @@ func (a *APIController) ListSnapStoreLocations(w http.ResponseWriter, r *http.Re
 	json.NewEncoder(w).Encode(locations)
 }
 
+func (a *APIController) CreateSnapStoreHandler(w http.ResponseWriter, r *http.Request) {
+	// CreateSnapStore
+	var newSnapData params.CreateSnapStoreRequest
+	if err := json.NewDecoder(r.Body).Decode(&newSnapData); err != nil {
+		handleError(w, gErrors.ErrBadRequest)
+		return
+	}
+
+	if newSnapData.SnapStoreLocation == "" || newSnapData.TrackedDisk == "" {
+		handleError(w, gErrors.ErrBadRequest)
+		return
+	}
+
+	response, err := a.mgr.CreateSnapStore(newSnapData)
+	if err != nil {
+		log.Printf("failed to get disk: %q", err)
+		fmt.Printf("%+v\n", err)
+		handleError(w, err)
+		return
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+func (a *APIController) ListSnapStoreHandler(w http.ResponseWriter, r *http.Request) {
+	snapStores, err := a.mgr.ListSnapStores()
+	if err != nil {
+		log.Printf("failed to get disk: %q", err)
+		fmt.Printf("%+v\n", err)
+		handleError(w, err)
+		return
+	}
+	json.NewEncoder(w).Encode(snapStores)
+}
+
 // // GetVMHandler gets information about a single VM.
 // func (a *APIController) GetVMHandler(w http.ResponseWriter, r *http.Request) {
 // 	vars := mux.Vars(r)

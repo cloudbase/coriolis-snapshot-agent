@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/timshannon/bolthold"
 
@@ -377,31 +378,6 @@ func (m *Snapshot) GetSnapStoreFilesLocation(path string) (params.SnapStoreLocat
 	}, nil
 }
 
-func (m *Snapshot) ListSnapStoreFilesLocations() ([]params.SnapStoreLocation, error) {
-	locations, err := m.db.ListSnapStoreFilesLocations()
-	if err != nil {
-		return nil, errors.Wrap(err, "fetching snap store files locations")
-	}
-
-	ret := make([]params.SnapStoreLocation, len(locations))
-	for idx, val := range locations {
-		fsInfo, err := util.GetFileSystemInfoFromPath(val.Path)
-		if err != nil {
-			return nil, errors.Wrap(err, "fetching filesystem info")
-		}
-		ret[idx] = params.SnapStoreLocation{
-			AllocatedCapacity: val.AllocatedSize,
-			AvailableCapacity: fsInfo.BlocksAvailable * uint64(fsInfo.BlockSize),
-			TotalCapacity:     val.TotalCapacity,
-			Path:              val.Path,
-			DevicePath:        val.DevicePath,
-			Major:             val.Major,
-			Minor:             val.Minor,
-		}
-	}
-	return ret, nil
-}
-
 func (m *Snapshot) ListAvailableSnapStoreLocations() ([]params.SnapStoreLocation, error) {
 	ret := make([]params.SnapStoreLocation, len(m.cfg.CoWDestination))
 
@@ -428,6 +404,133 @@ func (m *Snapshot) ListAvailableSnapStoreLocations() ([]params.SnapStoreLocation
 		}
 	}
 	return ret, nil
+}
+
+func (m *Snapshot) CreateSnapStore(param params.CreateSnapStoreRequest) (params.SnapStoreResponse, error) {
+	var err error
+
+	_, err = m.db.FindSnapStoresForDevice(param.TrackedDisk)
+	if err != nil {
+		if !errors.Is(err, bolthold.ErrNotFound) {
+			return params.SnapStoreResponse{}, errors.Wrap(err, "fetching snap store")
+		}
+	} else {
+		return params.SnapStoreResponse{}, vErrors.NewConflictError("device %s already has a snap store", param.TrackedDisk)
+	}
+
+	snapStoreLocation, err := m.db.GetSnapStoreFilesLocationByID(param.SnapStoreLocation)
+	if err != nil {
+		return params.SnapStoreResponse{}, errors.Wrap(err, "fetching snap store location")
+	}
+
+	disk, err := m.db.GetTrackedDiskByTrackingID(param.TrackedDisk)
+	if err != nil {
+		return params.SnapStoreResponse{}, errors.Wrap(err, "fetching tracked disk")
+	}
+
+	deviceIDs := []types.DevID{
+		{
+			Major: disk.Major,
+			Minor: disk.Minor,
+		},
+	}
+
+	snapDisk := types.DevID{
+		Major: snapStoreLocation.Major,
+		Minor: snapStoreLocation.Minor,
+	}
+
+	newUUID := uuid.New()
+	uuidAsBytes := [16]byte(newUUID)
+
+	newSnapStoreParams := db.SnapStore{
+		SnapStoreID:     newUUID.String(),
+		TrackedDisk:     disk,
+		StorageLocation: snapStoreLocation,
+	}
+
+	store, err := m.db.CreateSnapStore(newSnapStoreParams)
+	if err != nil {
+		return params.SnapStoreResponse{}, errors.Wrap(err, "adding store to db")
+	}
+
+	defer func() {
+		if err != nil {
+			m.db.DeleteSnapStore(store.SnapStoreID)
+		}
+	}()
+
+	if store.Path() == "" {
+		return params.SnapStoreResponse{}, errors.Errorf("snap store is invalid")
+	}
+
+	log.Printf("Checking for snap store location folder: %s", store.Path())
+	if _, statErr := os.Stat(store.Path()); statErr != nil {
+		if !errors.Is(statErr, fs.ErrNotExist) {
+			return params.SnapStoreResponse{}, errors.Wrap(statErr, "checking storage location")
+		}
+		log.Printf("Creating snap store location folder: %s", store.Path())
+
+		if mkdirErr := os.MkdirAll(store.Path(), 00770); mkdirErr != nil {
+			log.Printf("Error creating snap store location folder %s: %q", store.Path(), mkdirErr)
+			return params.SnapStoreResponse{}, errors.Wrap(mkdirErr, "creating storage location")
+		}
+
+		defer func(storageNeedsInit bool) {
+			if err != nil && storageNeedsInit {
+				log.Printf("Cleaning snap store location folder %s due to error: %q", store.Path(), err)
+				os.RemoveAll(store.Path())
+			}
+		}(true)
+	}
+
+	snapStore, err := ioctl.CreateSnapStore(uuidAsBytes, deviceIDs, snapDisk)
+	if err != nil {
+		return params.SnapStoreResponse{}, errors.Wrap(err, "creating snap store")
+	}
+
+	snapStoreID := uuid.UUID(snapStore.ID)
+
+	if snapStoreID != newUUID {
+		panic("returned snap store ID missmatch")
+	}
+
+	return params.SnapStoreResponse{
+		ID:                 store.SnapStoreID,
+		TrackedDiskID:      store.TrackedDisk.TrackingID,
+		StorageLocationID:  store.StorageLocation.TrackingID,
+		TotalAllocatedSize: store.TotalAllocatedSize,
+	}, nil
+}
+
+func (m *Snapshot) ListSnapStores() ([]params.SnapStoreResponse, error) {
+	stores, err := m.db.ListSnapStores()
+	if err != nil {
+		return nil, errors.Wrap(err, "fetching snap stores")
+	}
+	if len(stores) == 0 {
+		return []params.SnapStoreResponse{}, nil
+	}
+	resp := make([]params.SnapStoreResponse, len(stores))
+
+	for idx, val := range stores {
+		files, err := m.db.FindSnapStoreFiles(val.SnapStoreID)
+		if err != nil {
+			return []params.SnapStoreResponse{}, errors.Wrap(err, "fetching snap store files")
+		}
+
+		var totalAllocated int64
+		for _, file := range files {
+			totalAllocated += file.Size
+		}
+		resp[idx] = params.SnapStoreResponse{
+			ID:                 val.SnapStoreID,
+			TrackedDiskID:      val.TrackedDisk.TrackingID,
+			StorageLocationID:  val.StorageLocation.TrackingID,
+			TotalAllocatedSize: totalAllocated,
+		}
+	}
+	return resp, nil
 }
 
 // Init functions.

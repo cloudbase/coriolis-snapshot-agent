@@ -118,9 +118,48 @@ func (d *Database) GetSnapStore(storeID string) (SnapStore, error) {
 	return SnapStore{}, nil
 }
 
+// ListSnapStores fetches all snap store entities from the database.
+func (d *Database) ListSnapStores() ([]SnapStore, error) {
+	var stores []SnapStore
+	re := regexp.MustCompile(".*")
+	if err := d.con.Find(&stores, bolthold.Where("SnapStoreID").RegExp(re)); err != nil {
+		return nil, errors.Wrap(err, "fetching records")
+	}
+	return stores, nil
+}
+
+func (d *Database) FindSnapStoreFiles(storeID string) ([]SnapStoreFile, error) {
+	var files []SnapStoreFile
+	if err := d.con.Find(&files, bolthold.Where("SnapStore.TrackingID").Eq(storeID)); err != nil {
+		return nil, errors.Wrap(err, "fetching files")
+	}
+	return files, nil
+}
+
 // CreateSnapStore creates a new snap store entity inside the database.
-func (d *Database) CreateSnapStore(trackedDisk types.DevID, snapDevice string) (SnapStore, error) {
-	return SnapStore{}, nil
+func (d *Database) CreateSnapStore(param SnapStore) (SnapStore, error) {
+	if err := d.con.Insert(param.SnapStoreID, &param); err != nil {
+		return SnapStore{}, errors.Wrap(err, "inserting new snap store into db")
+	}
+	return param, nil
+}
+
+func (d *Database) FindSnapStoresForDevice(trackedDiskID string) (SnapStore, error) {
+	var snapStore SnapStore
+	if err := d.con.FindOne(&snapStore, bolthold.Where("TrackedDisk.TrackingID").Eq(trackedDiskID)); err != nil {
+		return snapStore, errors.Wrap(err, "fetching snap store for device")
+	}
+	return snapStore, nil
+}
+
+// DeleteSnapStore deletes a snap store from the database. This should only
+// be used as a cleanup step in case the snap store fails to get created in the veeam module.
+func (d *Database) DeleteSnapStore(snapStoreID string) error {
+	param := SnapStore{}
+	if err := d.con.Insert(snapStoreID, &param); err != nil {
+		return errors.Wrap(err, "inserting new snap store into db")
+	}
+	return nil
 }
 
 // AddFileToSnapStore associates one snap store file with a snap store, inside the database.
@@ -150,6 +189,19 @@ func (d *Database) GetSnapStoreFilesLocation(path string) (SnapStoreFilesLocatio
 	if err := d.con.FindOne(&location, bolthold.Where("Path").Eq(path)); err != nil {
 		if errors.Is(err, bolthold.ErrNotFound) {
 			return SnapStoreFilesLocation{}, vErrors.NewNotFoundError("path %s not found in db", path)
+		}
+		return SnapStoreFilesLocation{}, errors.Wrap(err, "finding location in db")
+	}
+	return location, nil
+}
+
+// GetSnapStoreFilesLocation gets one snap store file location entity, identified by path, from the database.
+func (d *Database) GetSnapStoreFilesLocationByID(trackingID string) (SnapStoreFilesLocation, error) {
+	var location SnapStoreFilesLocation
+
+	if err := d.con.FindOne(&location, bolthold.Where("TrackingID").Eq(trackingID)); err != nil {
+		if errors.Is(err, bolthold.ErrNotFound) {
+			return SnapStoreFilesLocation{}, vErrors.NewNotFoundError("path %s not found in db", trackingID)
 		}
 		return SnapStoreFilesLocation{}, errors.Wrap(err, "finding location in db")
 	}

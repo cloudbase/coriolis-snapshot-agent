@@ -1,5 +1,7 @@
 package db
 
+import "path/filepath"
+
 type TrackedDisk struct {
 	TrackingID string
 	Path       string
@@ -13,10 +15,18 @@ type TrackedDisk struct {
 // model. If it turns out to be a bad idea, we can switch later, as state
 // does not really persist across reboots.
 type SnapStore struct {
-	ID                 string `boltholdKey:"id"`
 	SnapStoreID        string
 	TrackedDisk        TrackedDisk
+	StorageLocation    SnapStoreFilesLocation
 	TotalAllocatedSize int64
+}
+
+func (s SnapStore) Path() string {
+	if s.SnapStoreID == "" {
+		return ""
+	}
+
+	return filepath.Join(s.StorageLocation.Path, s.SnapStoreID)
 }
 
 // SnapStoreFilesLocation holds
@@ -71,7 +81,7 @@ type SnapStoreFilesLocation struct {
 // now thinks those extents are free and can write files in those sectors.
 // This can lead both to file corruption and snapshot corruption.
 type SnapStoreFile struct {
-	ID                    string `boltholdKey:"id"`
+	TrackingID            string
 	SnapStore             SnapStore
 	SnapStoreFileLocation SnapStoreFilesLocation
 	Path                  string
@@ -79,23 +89,23 @@ type SnapStoreFile struct {
 }
 
 type Image struct {
-	ID    string `boltholdKey:"id"`
-	Path  string
-	Major uint32
-	Minor uint32
+	TrackingID string
+	Path       string
+	Major      uint32
+	Minor      uint32
 }
 
 // SnapshotTracker holds the ID of a snapshot. A snapshot ID in
 // veeamsnap can identify multiple disk snapshots, if multiple disks
 // were snapshot using a single ioctl call.
 type SnapshotTracker struct {
-	ID         string `boltholdKey:"id"`
+	TrackingID string
 	SnapshotID uint64
 }
 
 type Snapshot struct {
-	ID      string `boltholdKey:"id"`
-	Tracker SnapshotTracker
+	TrackingID string
+	Tracker    SnapshotTracker
 	// Generation ID is recorded in the CBT bitmap
 	// of each device that is being snapshot.
 	GenerationID string
