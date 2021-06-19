@@ -10,7 +10,6 @@ import (
 	"github.com/pkg/errors"
 
 	"coriolis-veeam-bridge/apiserver/params"
-	"coriolis-veeam-bridge/config"
 	gErrors "coriolis-veeam-bridge/errors"
 	"coriolis-veeam-bridge/manager"
 )
@@ -24,7 +23,6 @@ func NewAPIController(mgr *manager.Snapshot) (*APIController, error) {
 
 // APIController implements all API handlers.
 type APIController struct {
-	cfg *config.Config
 	mgr *manager.Snapshot
 }
 
