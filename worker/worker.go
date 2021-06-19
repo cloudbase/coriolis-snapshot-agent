@@ -4,12 +4,22 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"time"
 
 	"coriolis-veeam-bridge/apiserver/params"
+	"coriolis-veeam-bridge/internal/ioctl"
+	"coriolis-veeam-bridge/internal/types"
 	"coriolis-veeam-bridge/manager"
 
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
+)
+
+var (
+	// minimum amount of free space in a snap store (2 GB). Any less than this, and we add another
+	// 2 GB of space.
+	minimumSpaceForStore uint64 = 2 * 1024 * 1024 * 1024
 )
 
 func NewSnapStorageTracker(ctx context.Context, mgr *manager.Snapshot) (*SnapStoreTracker, error) {
@@ -66,12 +76,55 @@ func (s *SnapStoreTracker) ensureStorageForSnapStore(store params.SnapStoreRespo
 	if err != nil {
 		return errors.Wrap(err, "fetching disk")
 	}
-	log.Printf("disk %s has capacity %d", disk.Path, disk.Size)
 	snapStore, err := s.mgr.GetSnapStore(store.ID)
 	if err != nil {
 		return errors.Wrap(err, "fetching store info")
 	}
-	log.Printf("store %s has %d allocated bytes", snapStore.ID, snapStore.TotalAllocatedSize)
+
+	location, err := s.mgr.GetSnapStoreFilesLocationByID(snapStore.StorageLocationID)
+	if err != nil {
+		return errors.Wrap(err, "fetching snap store location")
+	}
+
+	var allocationSize uint64
+	if snapStore.TotalAllocatedSize == 0 {
+		// This is the first chunk we add. Make it max(10% of total disk size, 2GB)
+		calculatedSize := float64(disk.Size) * 0.1
+		defaultChunk := 2 * 1024 * 1024 * 1024
+		allocationSize = uint64(math.Max(float64(calculatedSize), float64(defaultChunk)))
+		if location.AvailableCapacity < uint64(allocationSize) {
+			return errors.Errorf("Cannot allocate %d bytes for snap store %s. Location only has %d bytes available", allocationSize, snapStore.ID, location.AvailableCapacity)
+		}
+		log.Printf("empty snap store for disk %s. Adding %d bytes to snap store %s", disk.Path, int64(allocationSize), snapStore.ID)
+		if err := s.mgr.AddCapacityToSnapStore(snapStore.ID, allocationSize); err != nil {
+			return errors.Wrapf(err, "adding capacity to snap store %s", snapStore.ID)
+		}
+		return nil
+	}
+
+	snapStoreID, err := uuid.Parse(snapStore.ID)
+	if err != nil {
+		return errors.Wrap(err, "parsing snap store ID")
+	}
+	snapStoreParams := types.SnapStore{
+		ID: [16]byte(snapStoreID),
+	}
+	snapStoreRet, err := ioctl.SnapStoreCleanup(snapStoreParams)
+	if err != nil {
+		return errors.Wrap(err, "fetching snap store usage")
+	}
+
+	usedPercent := uint64(snapStoreRet.FilledBytes) * 100 / snapStore.TotalAllocatedSize
+	remainingSpace := snapStore.TotalAllocatedSize - snapStoreRet.FilledBytes
+
+	if remainingSpace < minimumSpaceForStore {
+		log.Printf("snap store %s usage is %d out of %d (%d%%)", snapStore.ID, snapStoreRet.FilledBytes, snapStore.TotalAllocatedSize, usedPercent)
+		log.Printf("adding %d bytes to snap store %s", int64(allocationSize), snapStore.ID)
+		if err := s.mgr.AddCapacityToSnapStore(snapStore.ID, minimumSpaceForStore); err != nil {
+			return errors.Wrapf(err, "adding capacity to snap store %s", snapStore.ID)
+		}
+	}
+
 	return nil
 }
 

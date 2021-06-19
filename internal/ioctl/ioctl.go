@@ -319,7 +319,6 @@ func SnapStoreAddMemory(snapStore types.SnapStore, size uint64) error {
 	}
 
 	r1, _, err := syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), IOCTL_SNAPSTORE_MEMORY, uintptr(unsafe.Pointer(&memLimit)))
-	fmt.Println(r1, err, memLimit)
 	if r1 != 0 {
 		return errors.Wrap(err, "running ioctl")
 	}
@@ -355,6 +354,7 @@ func SnapStoreAddFile(snapStore types.SnapStore, file string) error {
 		range_count: C.uint(len(ranges)),
 	}
 	C.setSnapStoreFileRanges(&snapAddFile, &cRanges[0])
+
 	r1, _, err := syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), IOCTL_SNAPSTORE_FILE, uintptr(unsafe.Pointer(&snapAddFile)))
 	if r1 != 0 {
 		return errors.Wrap(err, "running ioctl")

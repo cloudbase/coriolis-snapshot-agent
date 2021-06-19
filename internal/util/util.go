@@ -137,7 +137,7 @@ func GetFileSystemInfoFromPath(path string) (FileSystemInfo, error) {
 }
 
 // CreateSnapStoreFile creates a new pre-allocated file of the given size.
-func CreateSnapStoreFile(filePath string, size int64) error {
+func CreateSnapStoreFile(filePath string, size uint64) error {
 	// TODO: Return ranges, range count and device major:minor
 
 	if _, err := os.Stat(filePath); err == nil {
@@ -155,7 +155,7 @@ func CreateSnapStoreFile(filePath string, size int64) error {
 	var fallocErr error
 
 	for i := 0; i < len(fallocFlags); i++ {
-		if err := syscall.Fallocate(int(fd.Fd()), fallocFlags[0], 0, size); err != nil {
+		if err := syscall.Fallocate(int(fd.Fd()), fallocFlags[0], 0, int64(size)); err != nil {
 			fallocErr = err
 			continue
 		}

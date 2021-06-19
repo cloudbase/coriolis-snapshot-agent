@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -53,7 +52,6 @@ func (a *APIController) GetDiskHandler(w http.ResponseWriter, r *http.Request) {
 	disk, err := a.mgr.GetTrackedDisk(diskID)
 	if err != nil {
 		log.Printf("failed to get disk: %q", err)
-		fmt.Printf("%+v\n", err)
 		handleError(w, err)
 		return
 	}
@@ -85,8 +83,7 @@ func (a *APIController) CreateSnapStoreHandler(w http.ResponseWriter, r *http.Re
 
 	response, err := a.mgr.CreateSnapStore(newSnapData)
 	if err != nil {
-		log.Printf("failed to get disk: %q", err)
-		fmt.Printf("%+v\n", err)
+		log.Printf("failed to get disk: %+v", err)
 		handleError(w, err)
 		return
 	}
@@ -96,8 +93,7 @@ func (a *APIController) CreateSnapStoreHandler(w http.ResponseWriter, r *http.Re
 func (a *APIController) ListSnapStoreHandler(w http.ResponseWriter, r *http.Request) {
 	snapStores, err := a.mgr.ListSnapStores()
 	if err != nil {
-		log.Printf("failed to get disk: %q", err)
-		fmt.Printf("%+v\n", err)
+		log.Printf("failed to get disk: %+v", err)
 		handleError(w, err)
 		return
 	}

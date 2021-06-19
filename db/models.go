@@ -18,7 +18,7 @@ type SnapStore struct {
 	SnapStoreID        string
 	TrackedDisk        TrackedDisk
 	StorageLocation    SnapStoreFilesLocation
-	TotalAllocatedSize int64
+	TotalAllocatedSize uint64
 }
 
 func (s SnapStore) Path() string {
@@ -43,10 +43,7 @@ type SnapStoreFilesLocation struct {
 	// space for CoW purposes, must be preserved until either the kernel
 	// module is reloaded or the system is rebooted.
 	Path string
-	// AllocatedSize is a cache of the total amount of disk space
-	// the SnapStoreFile objects take up. This folder should be cleared
-	// when the service starts, if a reboot was detected.
-	AllocatedSize uint64
+
 	// Total capacity is the total amount of disk exposed by the
 	// filesystem where we create files with which we allocate
 	// extents.
@@ -81,11 +78,11 @@ type SnapStoreFilesLocation struct {
 // now thinks those extents are free and can write files in those sectors.
 // This can lead both to file corruption and snapshot corruption.
 type SnapStoreFile struct {
-	TrackingID            string
-	SnapStore             SnapStore
-	SnapStoreFileLocation SnapStoreFilesLocation
-	Path                  string
-	Size                  int64
+	TrackingID             string
+	SnapStore              SnapStore
+	SnapStoreFilesLocation SnapStoreFilesLocation
+	Path                   string
+	Size                   uint64
 }
 
 type Image struct {

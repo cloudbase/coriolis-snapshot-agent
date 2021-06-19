@@ -57,12 +57,12 @@ func (d *Database) GetTrackedDisk(major, minor uint32) (TrackedDisk, error) {
 
 // GetTrackedDisk gets one tracked disk entity from the database
 func (d *Database) GetTrackedDiskByTrackingID(trackingID string) (TrackedDisk, error) {
-	var trackedDisk []TrackedDisk
+	var trackedDisk TrackedDisk
 
-	if err := d.con.Find(&trackedDisk, bolthold.Where("TrackingID").Eq(trackingID)); err != nil {
+	if err := d.con.FindOne(&trackedDisk, bolthold.Where("TrackingID").Eq(trackingID)); err != nil {
 		return TrackedDisk{}, errors.Wrap(err, "fetching tracked disk by id")
 	}
-	return trackedDisk[0], nil
+	return trackedDisk, nil
 }
 
 // GetAllTrackedDisks fetches all tracked disk entities from the database.
@@ -137,8 +137,16 @@ func (d *Database) ListSnapStores() ([]SnapStore, error) {
 
 func (d *Database) FindSnapStoreFiles(storeID string) ([]SnapStoreFile, error) {
 	var files []SnapStoreFile
-	if err := d.con.Find(&files, bolthold.Where("SnapStore.TrackingID").Eq(storeID)); err != nil {
+	if err := d.con.Find(&files, bolthold.Where("SnapStore.SnapStoreID").Eq(storeID)); err != nil {
 		return nil, errors.Wrap(err, "fetching files")
+	}
+	return files, nil
+}
+
+func (d *Database) FindSnapStoreLocationFiles(storeLocationID string) ([]SnapStoreFile, error) {
+	var files []SnapStoreFile
+	if err := d.con.Find(&files, bolthold.Where("SnapStoreFilesLocation.TrackingID").Eq(storeLocationID)); err != nil {
+		return nil, errors.Wrap(err, "fetching location files")
 	}
 	return files, nil
 }
@@ -163,14 +171,27 @@ func (d *Database) FindSnapStoresForDevice(trackedDiskID string) (SnapStore, err
 // be used as a cleanup step in case the snap store fails to get created in the veeam module.
 func (d *Database) DeleteSnapStore(snapStoreID string) error {
 	param := SnapStore{}
-	if err := d.con.Insert(snapStoreID, &param); err != nil {
-		return errors.Wrap(err, "inserting new snap store into db")
+	if err := d.con.Delete(snapStoreID, &param); err != nil {
+		return errors.Wrap(err, "deleting snap store from db")
 	}
 	return nil
 }
 
-// AddFileToSnapStore associates one snap store file with a snap store, inside the database.
-func (d *Database) AddFileToSnapStore(snapStore SnapStore, file SnapStoreFile) error {
+// CreateSnapStoreFile creates a new snap store file in the db.
+func (d *Database) CreateSnapStoreFile(param SnapStoreFile) (SnapStoreFile, error) {
+	if err := d.con.Insert(param.TrackingID, &param); err != nil {
+		return SnapStoreFile{}, errors.Wrap(err, "inserting new snap store into db")
+	}
+	return param, nil
+}
+
+// DeleteSnapStoreFile deletes a snap store file from the database. Do not expose deleting snap store
+// files to API consumers. This operation is only meant as a cleanup step in case of a failure during ioctl.
+func (d *Database) DeleteSnapStoreFile(fileID string) error {
+	param := SnapStoreFile{}
+	if err := d.con.Delete(fileID, &param); err != nil {
+		return errors.Wrap(err, "deleting snap store file from db")
+	}
 	return nil
 }
 

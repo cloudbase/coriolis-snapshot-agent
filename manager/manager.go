@@ -224,6 +224,10 @@ func (m *Snapshot) ListDisks(includeVirtual bool) ([]params.BlockVolume, error) 
 	return ret, nil
 }
 
+///////////////////
+// Tracked disks //
+///////////////////
+
 func (m *Snapshot) GetTrackedDisk(diskID string) (params.BlockVolume, error) {
 	if diskID == "" {
 		return params.BlockVolume{}, vErrors.NewBadRequestError("invalid disk id")
@@ -320,6 +324,10 @@ func (m *Snapshot) AddTrackedDisk(disk params.AddTrackedDiskRequest) (params.Blo
 	return ret, nil
 }
 
+//////////////////////////////
+// Snap store file location //
+//////////////////////////////
+
 // AddSnapStoreFilesLocation creates a new snap store location. Locations hosted on a device
 // that is currently tracked, will err out.
 func (m *Snapshot) AddSnapStoreFilesLocation(path string) (params.SnapStoreLocation, error) {
@@ -378,9 +386,18 @@ func (m *Snapshot) AddSnapStoreFilesLocation(path string) (params.SnapStoreLocat
 		return params.SnapStoreLocation{}, errors.Wrap(err, "creating db entry")
 	}
 
+	files, err := m.db.FindSnapStoreLocationFiles(createdStore.TrackingID)
+	if err != nil {
+		return params.SnapStoreLocation{}, errors.Wrap(err, "fetching snap store files")
+	}
+	var totalAllocated uint64
+	for _, file := range files {
+		totalAllocated += file.Size
+	}
+
 	return params.SnapStoreLocation{
 		ID:                createdStore.TrackingID,
-		AllocatedCapacity: createdStore.AllocatedSize,
+		AllocatedCapacity: totalAllocated,
 		AvailableCapacity: fsInfo.BlocksAvailable * uint64(fsInfo.BlockSize),
 		TotalCapacity:     createdStore.TotalCapacity,
 		Path:              createdStore.Path,
@@ -390,27 +407,49 @@ func (m *Snapshot) AddSnapStoreFilesLocation(path string) (params.SnapStoreLocat
 	}, nil
 }
 
+func (m *Snapshot) getSnapStoreLoctionInfo(location db.SnapStoreFilesLocation) (params.SnapStoreLocation, error) {
+	fsInfo, err := util.GetFileSystemInfoFromPath(location.Path)
+	if err != nil {
+		return params.SnapStoreLocation{}, errors.Wrap(err, "fetching filesystem info")
+	}
+
+	files, err := m.db.FindSnapStoreLocationFiles(location.TrackingID)
+	if err != nil {
+		return params.SnapStoreLocation{}, errors.Wrap(err, "fetching snap store files")
+	}
+	var totalAllocated uint64
+	for _, file := range files {
+		totalAllocated += file.Size
+	}
+
+	return params.SnapStoreLocation{
+		ID:                location.TrackingID,
+		AllocatedCapacity: totalAllocated,
+		AvailableCapacity: fsInfo.BlocksAvailable * uint64(fsInfo.BlockSize),
+		TotalCapacity:     location.TotalCapacity,
+		Path:              location.Path,
+		DevicePath:        location.DevicePath,
+		Major:             location.Major,
+		Minor:             location.Minor,
+	}, nil
+}
+
 func (m *Snapshot) GetSnapStoreFilesLocation(path string) (params.SnapStoreLocation, error) {
 	dbSnapFileDestination, err := m.db.GetSnapStoreFilesLocation(path)
 	if err != nil {
 		return params.SnapStoreLocation{}, errors.Wrap(err, "fetching snap store location info")
 	}
 
-	fsInfo, err := util.GetFileSystemInfoFromPath(path)
+	return m.getSnapStoreLoctionInfo(dbSnapFileDestination)
+}
+
+func (m *Snapshot) GetSnapStoreFilesLocationByID(locationID string) (params.SnapStoreLocation, error) {
+	dbSnapFileDestination, err := m.db.GetSnapStoreFilesLocationByID(locationID)
 	if err != nil {
-		return params.SnapStoreLocation{}, errors.Wrap(err, "fetching filesystem info")
+		return params.SnapStoreLocation{}, errors.Wrap(err, "fetching snap store location info")
 	}
 
-	return params.SnapStoreLocation{
-		ID:                dbSnapFileDestination.TrackingID,
-		AllocatedCapacity: dbSnapFileDestination.AllocatedSize,
-		AvailableCapacity: fsInfo.BlocksAvailable * uint64(fsInfo.BlockSize),
-		TotalCapacity:     dbSnapFileDestination.TotalCapacity,
-		Path:              dbSnapFileDestination.Path,
-		DevicePath:        dbSnapFileDestination.DevicePath,
-		Major:             dbSnapFileDestination.Major,
-		Minor:             dbSnapFileDestination.Minor,
-	}, nil
+	return m.getSnapStoreLoctionInfo(dbSnapFileDestination)
 }
 
 func (m *Snapshot) ListAvailableSnapStoreLocations() ([]params.SnapStoreLocation, error) {
@@ -427,9 +466,18 @@ func (m *Snapshot) ListAvailableSnapStoreLocations() ([]params.SnapStoreLocation
 			return nil, errors.Wrap(err, "fetching filesystem info")
 		}
 
+		files, err := m.db.FindSnapStoreLocationFiles(val.TrackingID)
+		if err != nil {
+			return []params.SnapStoreLocation{}, errors.Wrap(err, "fetching snap store files")
+		}
+		var totalAllocated uint64
+		for _, file := range files {
+			totalAllocated += file.Size
+		}
+
 		ret[idx] = params.SnapStoreLocation{
 			ID:                val.TrackingID,
-			AllocatedCapacity: val.AllocatedSize,
+			AllocatedCapacity: totalAllocated,
 			AvailableCapacity: fsInfo.BlocksAvailable * uint64(fsInfo.BlockSize),
 			TotalCapacity:     val.TotalCapacity,
 			Path:              val.Path,
@@ -441,6 +489,11 @@ func (m *Snapshot) ListAvailableSnapStoreLocations() ([]params.SnapStoreLocation
 	return ret, nil
 }
 
+/////////////////
+// Snap stores //
+/////////////////
+
+// CreateSnapStore creates a new snap store
 func (m *Snapshot) CreateSnapStore(param params.CreateSnapStoreRequest) (params.SnapStoreResponse, error) {
 	var err error
 
@@ -460,6 +513,9 @@ func (m *Snapshot) CreateSnapStore(param params.CreateSnapStoreRequest) (params.
 
 	disk, err := m.db.GetTrackedDiskByTrackingID(param.TrackedDisk)
 	if err != nil {
+		if errors.Is(err, bolthold.ErrNotFound) {
+			return params.SnapStoreResponse{}, vErrors.NewNotFoundError("no such tracked disk: %s", param.TrackedDisk)
+		}
 		return params.SnapStoreResponse{}, errors.Wrap(err, "fetching tracked disk")
 	}
 
@@ -557,7 +613,7 @@ func (m *Snapshot) ListSnapStores() ([]params.SnapStoreResponse, error) {
 			return []params.SnapStoreResponse{}, errors.Wrap(err, "fetching snap store files")
 		}
 
-		var totalAllocated int64
+		var totalAllocated uint64
 		for _, file := range files {
 			totalAllocated += file.Size
 		}
@@ -571,6 +627,7 @@ func (m *Snapshot) ListSnapStores() ([]params.SnapStoreResponse, error) {
 	return resp, nil
 }
 
+// GetSnapStore returns a snap store identified by ID
 func (m *Snapshot) GetSnapStore(storeID string) (params.SnapStoreResponse, error) {
 	store, err := m.db.GetSnapStore(storeID)
 	if err != nil {
@@ -581,10 +638,11 @@ func (m *Snapshot) GetSnapStore(storeID string) (params.SnapStoreResponse, error
 		return params.SnapStoreResponse{}, errors.Wrap(err, "fetching snap store files")
 	}
 
-	var totalAllocated int64
+	var totalAllocated uint64
 	for _, file := range files {
 		totalAllocated += file.Size
 	}
+
 	resp := params.SnapStoreResponse{
 		ID:                 store.SnapStoreID,
 		TrackedDiskID:      store.TrackedDisk.TrackingID,
@@ -594,6 +652,81 @@ func (m *Snapshot) GetSnapStore(storeID string) (params.SnapStoreResponse, error
 	return resp, nil
 }
 
+func (m *Snapshot) AddCapacityToSnapStore(snapStoreID string, capacity uint64) error {
+	var err error
+	snapStore, err := m.db.GetSnapStore(snapStoreID)
+	if err != nil {
+		return errors.Wrap(err, "fetching snap store from DB")
+	}
+
+	location, err := m.db.GetSnapStoreFilesLocationByID(snapStore.StorageLocation.TrackingID)
+	if err != nil {
+		return errors.Wrap(err, "fetching storage location")
+	}
+
+	locationInfo, err := m.getSnapStoreLoctionInfo(location)
+	if err != nil {
+		return errors.Wrap(err, "getting location info")
+	}
+
+	if locationInfo.AvailableCapacity < uint64(capacity) {
+		return errors.Errorf("Cannot allocate %d bytes for snap store %s. Location only has %d bytes available", capacity, location.TrackingID, locationInfo.AvailableCapacity)
+	}
+
+	newFileName := uuid.New()
+	snapStoreFilePath := filepath.Join(snapStore.Path(), newFileName.String())
+	if err := util.CreateSnapStoreFile(snapStoreFilePath, capacity); err != nil {
+		return errors.Errorf("failed to create %s: %+v", snapStoreFilePath, err)
+	}
+	defer func() {
+		if err != nil {
+			os.Remove(snapStoreFilePath)
+		}
+	}()
+
+	snapFileParams := db.SnapStoreFile{
+		TrackingID:             newFileName.String(),
+		SnapStore:              snapStore,
+		SnapStoreFilesLocation: location,
+		Path:                   snapStoreFilePath,
+		Size:                   capacity,
+	}
+
+	_, err = m.db.CreateSnapStoreFile(snapFileParams)
+	if err != nil {
+		return errors.Wrap(err, "adding snap store file")
+	}
+
+	defer func() {
+		if err != nil {
+			m.db.DeleteSnapStoreFile(snapFileParams.TrackingID)
+		}
+	}()
+
+	snapStoreIDFromString, err := uuid.Parse(snapStore.SnapStoreID)
+	if err != nil {
+		return errors.Wrap(err, "parsing snap store ID")
+	}
+	snapStoreParam := types.SnapStore{
+		ID: [16]byte(snapStoreIDFromString),
+		SnapshotDeviceID: types.DevID{
+			Major: snapStore.StorageLocation.Major,
+			Minor: snapStore.StorageLocation.Minor,
+		},
+	}
+
+	if err := ioctl.SnapStoreAddFile(snapStoreParam, snapStoreFilePath); err != nil {
+		return errors.Wrap(err, "adding file to snap store")
+	}
+
+	return nil
+}
+
+///////////////
+// Snapshots //
+///////////////
+
+// CreateSnapshot creates a new snapshot of one or more disks.
 func (m *Snapshot) CreateSnapshot(param params.CreateSnapshotRequest) error {
 	return nil
 }

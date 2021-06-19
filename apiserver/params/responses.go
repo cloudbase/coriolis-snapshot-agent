@@ -185,5 +185,5 @@ type SnapStoreResponse struct {
 	ID                 string `json:"id"`
 	TrackedDiskID      string `json:"tracked_disk_id"`
 	StorageLocationID  string `json:"storage_location_id"`
-	TotalAllocatedSize int64  `json:"total_allocated_size"`
+	TotalAllocatedSize uint64 `json:"total_allocated_size"`
 }
