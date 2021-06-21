@@ -394,8 +394,19 @@ func SnapStoreAddFileMultiDev(snapStore types.SnapStore, file string) error {
 }
 
 func SnapStoreCleanup(snapStore types.SnapStore) (types.SnapStoreCleanupParams, error) {
+	dev, err := os.OpenFile(VEEAM_DEV, os.O_RDWR, 0600)
+	if err != nil {
+		return types.SnapStoreCleanupParams{}, errors.Wrap(err, "opening veeamsnap")
+	}
+	defer dev.Close()
+
 	snapCleanup := C.struct_ioctl_snapstore_cleanup_s{
 		id: goToCUUID(snapStore.ID),
+	}
+
+	r1, _, err := syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), IOCTL_SNAPSTORE_CLEANUP, uintptr(unsafe.Pointer(&snapCleanup)))
+	if r1 != 0 {
+		return types.SnapStoreCleanupParams{}, errors.Wrap(err, "running ioctl")
 	}
 
 	return types.SnapStoreCleanupParams{

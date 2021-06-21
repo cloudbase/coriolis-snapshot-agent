@@ -37,45 +37,43 @@ func NewAPIRouter(han *controllers.APIController, logWriter io.Writer) *mux.Rout
 	apiRouter.Handle("/disks/{diskTrackingID}/snapshots", log(logWriter, http.HandlerFunc(han.ListDisksHandler))).Methods("GET")
 	apiRouter.Handle("/disks/{diskTrackingID}/snapshots/", log(logWriter, http.HandlerFunc(han.ListDisksHandler))).Methods("GET")
 
+	///////////////
+	// Snapshots //
+	///////////////
 	// view or delete a single snapshot.
-	apiRouter.Handle("/snapshots/{snapshotID}", log(logWriter, http.HandlerFunc(han.ListDisksHandler))).Methods("GET")
-	apiRouter.Handle("/snapshots/{snapshotID}/", log(logWriter, http.HandlerFunc(han.ListDisksHandler))).Methods("GET")
+	apiRouter.Handle("/snapshots/{snapshotID}", log(logWriter, http.HandlerFunc(han.GetSnapshotHandler))).Methods("GET")
+	apiRouter.Handle("/snapshots/{snapshotID}/", log(logWriter, http.HandlerFunc(han.GetSnapshotHandler))).Methods("GET")
+
+	apiRouter.Handle("/snapshots/{snapshotID}", log(logWriter, http.HandlerFunc(han.DeleteSnapshotHandler))).Methods("DELETE")
+	apiRouter.Handle("/snapshots/{snapshotID}/", log(logWriter, http.HandlerFunc(han.DeleteSnapshotHandler))).Methods("DELETE")
 
 	// Create and view snapshots endpoint.
-	apiRouter.Handle("/snapshots", log(logWriter, http.HandlerFunc(han.ListDisksHandler))).Methods("GET")
-	apiRouter.Handle("/snapshots/", log(logWriter, http.HandlerFunc(han.ListDisksHandler))).Methods("GET")
+	apiRouter.Handle("/snapshots", log(logWriter, http.HandlerFunc(han.ListSnapshotsHandler))).Methods("GET")
+	apiRouter.Handle("/snapshots/", log(logWriter, http.HandlerFunc(han.ListSnapshotsHandler))).Methods("GET")
+
+	apiRouter.Handle("/snapshots", log(logWriter, http.HandlerFunc(han.CreateSnapshotHandler))).Methods("POST")
+	apiRouter.Handle("/snapshots/", log(logWriter, http.HandlerFunc(han.CreateSnapshotHandler))).Methods("POST")
 
 	// snap store management.
 	// Read snap stores
 	apiRouter.Handle("/snapstores", log(logWriter, http.HandlerFunc(han.ListSnapStoreHandler))).Methods("GET")
 	apiRouter.Handle("/snapstores/", log(logWriter, http.HandlerFunc(han.ListSnapStoreHandler))).Methods("GET")
 	// Create snap store
-	apiRouter.Handle("/snapstores", log(logWriter, http.HandlerFunc(han.CreateSnapStoreHandler))).Methods("POST")
-	apiRouter.Handle("/snapstores/", log(logWriter, http.HandlerFunc(han.CreateSnapStoreHandler))).Methods("POST")
+	// apiRouter.Handle("/snapstores", log(logWriter, http.HandlerFunc(han.CreateSnapStoreHandler))).Methods("POST")
+	// apiRouter.Handle("/snapstores/", log(logWriter, http.HandlerFunc(han.CreateSnapStoreHandler))).Methods("POST")
 
 	apiRouter.Handle("/snapstorelocations", log(logWriter, http.HandlerFunc(han.ListSnapStoreLocations))).Methods("GET")
 	apiRouter.Handle("/snapstorelocations/", log(logWriter, http.HandlerFunc(han.ListSnapStoreLocations))).Methods("GET")
-	// // get VM
-	// apiRouter.Handle("/vms/{vmID}", log(logWriter, http.HandlerFunc(han.GetVMHandler))).Methods("GET")
-	// apiRouter.Handle("/vms/{vmID}/", log(logWriter, http.HandlerFunc(han.GetVMHandler))).Methods("GET")
-	// // list VM snapshots
-	// apiRouter.Handle("/vms/{vmID}/snapshots", log(logWriter, http.HandlerFunc(han.ListSnapshotsHandler))).Methods("GET")
-	// apiRouter.Handle("/vms/{vmID}/snapshots/", log(logWriter, http.HandlerFunc(han.ListSnapshotsHandler))).Methods("GET")
-	// // delete all VM snapshots
-	// apiRouter.Handle("/vms/{vmID}/snapshots", log(logWriter, http.HandlerFunc(han.PurgeSnapshotsHandler))).Methods("DELETE")
-	// apiRouter.Handle("/vms/{vmID}/snapshots/", log(logWriter, http.HandlerFunc(han.PurgeSnapshotsHandler))).Methods("DELETE")
-	// // create VM snapshot
-	// apiRouter.Handle("/vms/{vmID}/snapshots", log(logWriter, http.HandlerFunc(han.CreateSnapshotHandler))).Methods("POST")
-	// apiRouter.Handle("/vms/{vmID}/snapshots/", log(logWriter, http.HandlerFunc(han.CreateSnapshotHandler))).Methods("POST")
-	// // get VM snapshot
-	// apiRouter.Handle("/vms/{vmID}/snapshots/{snapshotID}", log(logWriter, http.HandlerFunc(han.GetSnapshotHandler))).Methods("GET")
-	// apiRouter.Handle("/vms/{vmID}/snapshots/{snapshotID}/", log(logWriter, http.HandlerFunc(han.GetSnapshotHandler))).Methods("GET")
-	// // delete VM snapshot
-	// apiRouter.Handle("/vms/{vmID}/snapshots/{snapshotID}", log(logWriter, http.HandlerFunc(han.DeleteSnapshotHandler))).Methods("DELETE")
-	// apiRouter.Handle("/vms/{vmID}/snapshots/{snapshotID}/", log(logWriter, http.HandlerFunc(han.DeleteSnapshotHandler))).Methods("DELETE")
-	// // Read snapshotted disk
-	// apiRouter.Handle("/vms/{vmID}/snapshots/{snapshotID}/disks/{diskID}", log(logWriter, http.HandlerFunc(han.ConsumeSnapshotHandler))).Methods("GET", "HEAD")
-	// apiRouter.Handle("/vms/{vmID}/snapshots/{snapshotID}/disks/{diskID}/", log(logWriter, http.HandlerFunc(han.ConsumeSnapshotHandler))).Methods("GET", "HEAD")
+
+	// snap store mappings
+	apiRouter.Handle("/snapstoremappings", log(logWriter, http.HandlerFunc(han.ListSnapStoreMappingsHandler))).Methods("GET")
+	apiRouter.Handle("/snapstoremappings/", log(logWriter, http.HandlerFunc(han.ListSnapStoreMappingsHandler))).Methods("GET")
+
+	apiRouter.Handle("/snapstoremappings", log(logWriter, http.HandlerFunc(han.CreateSnapStoreMappingHandler))).Methods("POST")
+	apiRouter.Handle("/snapstoremappings/", log(logWriter, http.HandlerFunc(han.CreateSnapStoreMappingHandler))).Methods("POST")
+
+	apiRouter.Handle("/snapstoremappings/{mappingID}", log(logWriter, http.HandlerFunc(han.ListSnapStoreHandler))).Methods("DELETE")
+	apiRouter.Handle("/snapstoremappings/{mappingID}/", log(logWriter, http.HandlerFunc(han.ListSnapStoreHandler))).Methods("DELETE")
 
 	// Not found handler
 	apiRouter.PathPrefix("/").Handler(log(logWriter, http.HandlerFunc(han.NotFoundHandler)))

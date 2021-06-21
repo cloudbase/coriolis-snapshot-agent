@@ -493,28 +493,67 @@ func (m *Snapshot) ListAvailableSnapStoreLocations() ([]params.SnapStoreLocation
 // Snap stores //
 /////////////////
 
+func (m *Snapshot) snapStoreUsedBytes(snapStoreID string) (uint64, error) {
+	uuidParsed, err := uuid.Parse(snapStoreID)
+	if err != nil {
+		return 0, errors.Wrap(err, "parsing UUID")
+	}
+	snapStoreParams := types.SnapStore{
+		ID: [16]byte(uuidParsed),
+	}
+
+	snapStore, err := m.db.GetSnapStore(snapStoreID)
+	if err != nil {
+		return 0, errors.Wrap(err, "getting snap store")
+	}
+
+	snapshots, err := m.db.ListSnapshotsForDisk(snapStore.TrackedDisk.TrackingID)
+	if err != nil {
+		return 0, errors.Wrap(err, "listing snapshots for disk")
+	}
+
+	if len(snapshots) == 0 {
+		// Calling ioctl.SnapStoreCleanup on an empty store, will delete the snap store.
+		// When there is at least one snapshot, ioctl.SnapStoreCleanup will return the
+		// amount of disk space ocupied by the CoW data. Return 0 and nil here, because
+		// there is no space ocupied by a snap store with no snapshots associated.
+		return 0, nil
+	}
+
+	log.Printf("fetching info about %s", snapStoreID)
+	snapStoreRet, err := ioctl.SnapStoreCleanup(snapStoreParams)
+	if err != nil {
+		return 0, errors.Wrap(err, "fetching snap store usage")
+	}
+	if snapStoreRet.FilledBytes == ioctl.SNAP_STORE_NOT_FOUND {
+		return 0, vErrors.NewNotFoundError("snap store %s does not exist", snapStoreID)
+	}
+	log.Printf("Filled bytes for %s is %d", snapStoreID, snapStoreRet.FilledBytes)
+	return snapStoreRet.FilledBytes, nil
+}
+
 // CreateSnapStore creates a new snap store
-func (m *Snapshot) CreateSnapStore(param params.CreateSnapStoreRequest) (params.SnapStoreResponse, error) {
+func (m *Snapshot) CreateSnapStore(trackedDisk, storeLocation string) (params.SnapStoreResponse, error) {
 	var err error
 
-	_, err = m.db.FindSnapStoresForDevice(param.TrackedDisk)
+	_, err = m.db.FindSnapStoresForDevice(trackedDisk)
 	if err != nil {
 		if !errors.Is(err, bolthold.ErrNotFound) {
 			return params.SnapStoreResponse{}, errors.Wrap(err, "fetching snap store")
 		}
 	} else {
-		return params.SnapStoreResponse{}, vErrors.NewConflictError("device %s already has a snap store", param.TrackedDisk)
+		return params.SnapStoreResponse{}, vErrors.NewConflictError("device %s already has a snap store", trackedDisk)
 	}
 
-	snapStoreLocation, err := m.db.GetSnapStoreFilesLocationByID(param.SnapStoreLocation)
+	snapStoreLocation, err := m.db.GetSnapStoreFilesLocationByID(storeLocation)
 	if err != nil {
 		return params.SnapStoreResponse{}, errors.Wrap(err, "fetching snap store location")
 	}
 
-	disk, err := m.db.GetTrackedDiskByTrackingID(param.TrackedDisk)
+	disk, err := m.db.GetTrackedDiskByTrackingID(trackedDisk)
 	if err != nil {
 		if errors.Is(err, bolthold.ErrNotFound) {
-			return params.SnapStoreResponse{}, vErrors.NewNotFoundError("no such tracked disk: %s", param.TrackedDisk)
+			return params.SnapStoreResponse{}, vErrors.NewNotFoundError("no such tracked disk: %s", trackedDisk)
 		}
 		return params.SnapStoreResponse{}, errors.Wrap(err, "fetching tracked disk")
 	}
@@ -590,7 +629,7 @@ func (m *Snapshot) CreateSnapStore(param params.CreateSnapStoreRequest) (params.
 		ID:                 store.SnapStoreID,
 		TrackedDiskID:      store.TrackedDisk.TrackingID,
 		StorageLocationID:  store.StorageLocation.TrackingID,
-		TotalAllocatedSize: store.TotalAllocatedSize,
+		AllocatedDiskSpace: store.TotalAllocatedSize,
 	}
 
 	m.SendNotify(SnapStoreCreateEvent, snapStoreRet)
@@ -617,11 +656,16 @@ func (m *Snapshot) ListSnapStores() ([]params.SnapStoreResponse, error) {
 		for _, file := range files {
 			totalAllocated += file.Size
 		}
+		snapStoreUsage, err := m.snapStoreUsedBytes(val.SnapStoreID)
+		if err != nil {
+			return []params.SnapStoreResponse{}, errors.Wrap(err, "fetching snap store usage")
+		}
 		resp[idx] = params.SnapStoreResponse{
 			ID:                 val.SnapStoreID,
 			TrackedDiskID:      val.TrackedDisk.TrackingID,
 			StorageLocationID:  val.StorageLocation.TrackingID,
-			TotalAllocatedSize: totalAllocated,
+			AllocatedDiskSpace: totalAllocated,
+			StorageUsage:       snapStoreUsage,
 		}
 	}
 	return resp, nil
@@ -642,12 +686,17 @@ func (m *Snapshot) GetSnapStore(storeID string) (params.SnapStoreResponse, error
 	for _, file := range files {
 		totalAllocated += file.Size
 	}
+	snapStoreUsage, err := m.snapStoreUsedBytes(store.SnapStoreID)
+	if err != nil {
+		return params.SnapStoreResponse{}, errors.Wrap(err, "fetching snap store usage")
+	}
 
 	resp := params.SnapStoreResponse{
 		ID:                 store.SnapStoreID,
 		TrackedDiskID:      store.TrackedDisk.TrackingID,
 		StorageLocationID:  store.StorageLocation.TrackingID,
-		TotalAllocatedSize: totalAllocated,
+		AllocatedDiskSpace: totalAllocated,
+		StorageUsage:       snapStoreUsage,
 	}
 	return resp, nil
 }
@@ -722,12 +771,143 @@ func (m *Snapshot) AddCapacityToSnapStore(snapStoreID string, capacity uint64) e
 	return nil
 }
 
+////////////////////////
+// Snap store mapping //
+////////////////////////
+
+func (m *Snapshot) CreateSnapStoreMapping(param params.CreateSnapStoreMappingRequest) (params.SnapStoreMappingResponse, error) {
+	trackedDisk, err := m.db.GetTrackedDiskByTrackingID(param.TrackedDisk)
+	if err != nil {
+		return params.SnapStoreMappingResponse{}, errors.Wrap(err, "fetching tracked disk")
+	}
+
+	existingStore, err := m.db.GetSnapStoreMappingByDeviceID(param.TrackedDisk)
+	if err != nil {
+		if !errors.Is(err, vErrors.ErrNotFound) {
+			return params.SnapStoreMappingResponse{}, errors.Wrap(err, "checking store mapping")
+		}
+	} else {
+		return params.SnapStoreMappingResponse{}, vErrors.NewConflictError("disk %s already has a snap store mapping: %s", trackedDisk.TrackingID, existingStore.TrackingID)
+	}
+
+	storeLocation, err := m.db.GetSnapStoreFilesLocationByID(param.SnapStoreLocation)
+	if err != nil {
+		return params.SnapStoreMappingResponse{}, errors.Wrap(err, "fetching store location")
+	}
+
+	newID := uuid.New()
+	createParams := db.SnapStoreMapping{
+		TrackingID:             newID.String(),
+		TrackedDisk:            trackedDisk,
+		SnapStoreFilesLocation: storeLocation,
+	}
+
+	newMappingRet, err := m.db.CreateSnapStoreMapping(createParams)
+	if err != nil {
+		return params.SnapStoreMappingResponse{}, errors.Wrap(err, "creating mapping")
+	}
+	return params.SnapStoreMappingResponse{
+		ID:                newMappingRet.TrackingID,
+		TrackedDiskID:     trackedDisk.TrackingID,
+		StorageLocationID: storeLocation.TrackingID,
+	}, nil
+}
+
+func (m *Snapshot) ListSnapStoreMappings() ([]params.SnapStoreMappingResponse, error) {
+	storeMappings, err := m.db.ListSnapStoreMappings()
+	if err != nil {
+		return []params.SnapStoreMappingResponse{}, errors.Wrap(err, "fetching snap store mappings")
+	}
+	ret := make([]params.SnapStoreMappingResponse, len(storeMappings))
+	for idx, val := range storeMappings {
+		ret[idx] = params.SnapStoreMappingResponse{
+			ID:                val.TrackingID,
+			TrackedDiskID:     val.TrackedDisk.TrackingID,
+			StorageLocationID: val.SnapStoreFilesLocation.TrackingID,
+		}
+	}
+	return ret, nil
+}
+
 ///////////////
 // Snapshots //
 ///////////////
 
 // CreateSnapshot creates a new snapshot of one or more disks.
 func (m *Snapshot) CreateSnapshot(param params.CreateSnapshotRequest) error {
+	m.mux.Lock()
+	defer m.mux.Unlock()
+
+	info, err := ioctl.GetCBTInfo()
+	if err != nil {
+		fmt.Printf("%+v\n", err)
+		return errors.Wrap(err, "fetching CBT info")
+	}
+	js, _ := json.MarshalIndent(info, "", "  ")
+	fmt.Println(string(js))
+
+	imgs, err := ioctl.CollectSnapshotImages()
+	if err != nil {
+		return errors.Wrap(err, "collecting images")
+	}
+
+	jsImg, _ := json.MarshalIndent(imgs, "", "  ")
+	fmt.Println(string(jsImg))
+
+	// js, _ := json.MarshalIndent(cbtInfo, "", "  ")
+	// fmt.Println(string(js))
+
+	var devices []types.DevID
+	for _, val := range param.TrackedDiskIDs {
+		dbDev, err := m.db.GetTrackedDiskByTrackingID(val)
+		if err != nil {
+			return errors.Wrap(err, "getting device")
+		}
+		devices = append(devices, types.DevID{
+			Major: dbDev.Major,
+			Minor: dbDev.Minor,
+		})
+	}
+
+	snapshot, err := ioctl.CreateSnapshot(devices)
+	if err != nil {
+		fmt.Printf(">>> %+v\n", err)
+		return errors.Wrap(err, "creating snapshot")
+	}
+
+	js2, _ := json.MarshalIndent(snapshot, "", "  ")
+	fmt.Println(string(js2))
+
+	info, err = ioctl.GetCBTInfo()
+	if err != nil {
+		fmt.Printf("%+v\n", err)
+		return errors.Wrap(err, "fetching CBT info")
+	}
+	js, _ = json.MarshalIndent(info, "", "  ")
+	fmt.Println(string(js))
+
+	imgs, err = ioctl.CollectSnapshotImages()
+	if err != nil {
+		return errors.Wrap(err, "collecting images")
+	}
+
+	jsImg, _ = json.MarshalIndent(imgs, "", "  ")
+	fmt.Println(string(jsImg))
+
+	// if err := ioctl.DeleteSnapshot(snapshot.SnapshotID); err != nil {
+	// 	return errors.Wrap(err, "deleting snapshots")
+	// }
+
+	// bitmap, err := ioctl.GetCBTBitmap(params)
+
+	// if err != nil {
+	// 	fmt.Printf("%+v\n", err)
+	// 	return
+	// }
+	return nil
+}
+
+func (m *Snapshot) DeleteSnaphot(snapshotID uint64) error {
 	return nil
 }
 

@@ -3,6 +3,8 @@ package ioctl
 const (
 	VEEAM_SNAP = 'V'
 	VEEAM_DEV  = "/dev/veeamsnap"
+
+	SNAP_STORE_NOT_FOUND = 0xffffffffffffffff
 )
 
 var (

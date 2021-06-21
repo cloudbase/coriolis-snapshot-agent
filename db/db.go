@@ -45,6 +45,9 @@ type Database struct {
 	con      *bolthold.Store
 }
 
+/////////////////
+// TrackedDisk //
+/////////////////
 // GetTrackedDisk gets one tracked disk entity from the database
 func (d *Database) GetTrackedDisk(major, minor uint32) (TrackedDisk, error) {
 	var trackedDisk TrackedDisk
@@ -88,24 +91,58 @@ func (d *Database) RemoveTrackedDisk(device types.DevID) error {
 	return nil
 }
 
+///////////////
+// Snapshots //
+///////////////
 // GetSnapshot gets one snapshot entity, identified by snapID, from the database.
 func (d *Database) GetSnapshot(snapID uint64) (Snapshot, error) {
-	return Snapshot{}, nil
+	var snapshot Snapshot
+	if err := d.con.FindOne(&snapshot, bolthold.Where("SnapshotID").Eq(snapID)); err != nil {
+		if errors.Is(err, bolthold.ErrNotFound) {
+			return snapshot, vErrors.NewNotFoundError("snapshot ID %s not found in db", snapID)
+		}
+		return snapshot, errors.Wrap(err, "finding location in db")
+	}
+	return snapshot, nil
 }
 
-// ListSnapshotsForDevice lists all snapshots associated with a device.
-func (d *Database) ListSnapshotsForDevice(device types.DevID) ([]Snapshot, error) {
-	return nil, nil
+func (d *Database) ListSnapshotsForDisk(diskID string) ([]Snapshot, error) {
+	var volumeSnaps []VolumeSnapshot
+	if err := d.con.Find(&volumeSnaps, bolthold.Where("OriginalDevice.TrackingID").Eq(diskID)); err != nil {
+		return []Snapshot{}, errors.Wrap(err, "fetching records")
+	}
+
+	var snapshots []Snapshot
+	snapshotIDs := make([]interface{}, len(volumeSnaps))
+	for idx, val := range volumeSnaps {
+		snapshotIDs[idx] = val.SnapshotID
+	}
+
+	if err := d.con.Find(&snapshots, bolthold.Where("SnapshotID").In(snapshotIDs)); err != nil {
+		return []Snapshot{}, errors.Wrap(err, "fetching records")
+	}
+
+	return snapshots, nil
 }
 
 // ListAllSnapshots lists all snapshots from the database.
 func (d *Database) ListAllSnapshots() ([]Snapshot, error) {
-	return nil, nil
+	var snapshots []Snapshot
+
+	re := regexp.MustCompile(".*")
+	if err := d.con.Find(&snapshots, bolthold.Where("SnapshotID").RegExp(re)); err != nil {
+		return []Snapshot{}, errors.Wrap(err, "fetching records")
+	}
+
+	return snapshots, nil
 }
 
 // CreateSnapshot creates a new snapshot entity inside the database.
-func (d *Database) CreateSnapshot(devices []types.DevID) (Snapshot, error) {
-	return Snapshot{}, nil
+func (d *Database) CreateSnapshot(param Snapshot) (Snapshot, error) {
+	if err := d.con.Insert(param.SnapshotID, &param); err != nil {
+		return Snapshot{}, errors.Wrap(err, "inserting new snap store location into db")
+	}
+	return param, nil
 }
 
 // DeleteSnapshot deletes a snapshot entity from the databse.
@@ -113,6 +150,9 @@ func (d *Database) DeleteSnapshot(snapshotID uint64) error {
 	return nil
 }
 
+/////////////////
+// Snap stores //
+/////////////////
 // GetSnapStore fetches one snap store entity from the database.
 func (d *Database) GetSnapStore(storeID string) (SnapStore, error) {
 	var store SnapStore
@@ -143,14 +183,6 @@ func (d *Database) FindSnapStoreFiles(storeID string) ([]SnapStoreFile, error) {
 	return files, nil
 }
 
-func (d *Database) FindSnapStoreLocationFiles(storeLocationID string) ([]SnapStoreFile, error) {
-	var files []SnapStoreFile
-	if err := d.con.Find(&files, bolthold.Where("SnapStoreFilesLocation.TrackingID").Eq(storeLocationID)); err != nil {
-		return nil, errors.Wrap(err, "fetching location files")
-	}
-	return files, nil
-}
-
 // CreateSnapStore creates a new snap store entity inside the database.
 func (d *Database) CreateSnapStore(param SnapStore) (SnapStore, error) {
 	if err := d.con.Insert(param.SnapStoreID, &param); err != nil {
@@ -177,6 +209,9 @@ func (d *Database) DeleteSnapStore(snapStoreID string) error {
 	return nil
 }
 
+/////////////////////
+// Snap store file //
+/////////////////////
 // CreateSnapStoreFile creates a new snap store file in the db.
 func (d *Database) CreateSnapStoreFile(param SnapStoreFile) (SnapStoreFile, error) {
 	if err := d.con.Insert(param.TrackingID, &param); err != nil {
@@ -210,6 +245,17 @@ func (d *Database) ListAllSnapStoreFiles() ([]SnapStoreFile, error) {
 	return nil, nil
 }
 
+func (d *Database) FindSnapStoreLocationFiles(storeLocationID string) ([]SnapStoreFile, error) {
+	var files []SnapStoreFile
+	if err := d.con.Find(&files, bolthold.Where("SnapStoreFilesLocation.TrackingID").Eq(storeLocationID)); err != nil {
+		return nil, errors.Wrap(err, "fetching location files")
+	}
+	return files, nil
+}
+
+/////////////////////////
+// Snap store location //
+/////////////////////////
 // GetSnapStoreFilesLocation gets one snap store file location entity, identified by path, from the database.
 func (d *Database) GetSnapStoreFilesLocation(path string) (SnapStoreFilesLocation, error) {
 	var location SnapStoreFilesLocation
@@ -257,65 +303,50 @@ func (d *Database) ListSnapStoreFilesLocations() ([]SnapStoreFilesLocation, erro
 	return allLocations, nil
 }
 
-// // CreateSnapshot creates a new snapshot object in the database.
-// func (d *Database) CreateSnapshot(snapID, vmID string, disks []params.DiskSnapshot) (Snapshot, error) {
-// 	snap := Snapshot{
-// 		ID:        snapID,
-// 		VMID:      vmID,
-// 		Disks:     disks,
-// 		CreatedAt: time.Now().UTC(),
-// 	}
-// 	if err := d.con.Save(&snap); err != nil {
-// 		return Snapshot{}, errors.Wrap(err, "adding sync folder")
-// 	}
+////////////////////////
+// Snap store mapping //
+////////////////////////
 
-// 	return snap, nil
-// }
+func (d *Database) GetSnapStoreMappingByDeviceID(deviceID string) (SnapStoreMapping, error) {
+	var mapping SnapStoreMapping
 
-// // DeleteSnapshot removes a snapshot object from the database.
-// func (d *Database) DeleteSnapshot(snapID string) error {
-// 	var snap Snapshot
-// 	if err := d.con.One("ID", snapID, &snap); err != nil {
-// 		if err != storm.ErrNotFound {
-// 			return errors.Wrap(err, "fetching sync folder")
-// 		}
-// 		return nil
-// 	}
+	if err := d.con.FindOne(&mapping, bolthold.Where("TrackedDisk.TrackingID").Eq(deviceID)); err != nil {
+		if errors.Is(err, bolthold.ErrNotFound) {
+			return SnapStoreMapping{}, vErrors.NewNotFoundError("mapping for device ID %s not found in db", deviceID)
+		}
+		return SnapStoreMapping{}, errors.Wrap(err, "finding mapping in db")
+	}
+	return mapping, nil
+}
 
-// 	if err := d.con.DeleteStruct(&snap); err != nil {
-// 		return errors.Wrap(err, "deleting snapshot")
-// 	}
+func (d *Database) GetSnapStoreMappingByLocationID(locationID string) (SnapStoreMapping, error) {
+	return SnapStoreMapping{}, nil
+}
 
-// 	return nil
-// }
+func (d *Database) GetSnapStoreMappingByID(trackingID string) (SnapStoreMapping, error) {
+	return SnapStoreMapping{}, nil
+}
 
-// // DeleteVMSnapshots deletes all snapshots for a VM.
-// func (d *Database) DeleteVMSnapshots(vmID string) error {
-// 	if err := d.con.Select(q.Eq("VMID", vmID)).Delete(&Snapshot{}); err != nil {
-// 		return errors.Wrap(err, "deleting snapshots")
-// 	}
-// 	return nil
-// }
+func (d *Database) CreateSnapStoreMapping(param SnapStoreMapping) (SnapStoreMapping, error) {
+	if err := d.con.Insert(param.TrackingID, &param); err != nil {
+		return SnapStoreMapping{}, errors.Wrap(err, "inserting new snap store into db")
+	}
+	return param, nil
+}
 
-// // ListSnapshots lists all snapshots for a VM.
-// func (d *Database) ListSnapshots(vmID string) ([]Snapshot, error) {
-// 	var snaps []Snapshot
-// 	if err := d.con.Select(q.Eq("VMID", vmID)).OrderBy("CreatedAt").Find(&snaps); err != nil {
-// 		if err == storm.ErrNotFound {
-// 			return snaps, nil
-// 		}
-// 		return snaps, errors.Wrap(err, "fetching VM snapshots")
-// 	}
+func (d *Database) ListSnapStoreMappings() ([]SnapStoreMapping, error) {
+	var storeMappings []SnapStoreMapping
+	re := regexp.MustCompile(".*")
+	if err := d.con.Find(&storeMappings, bolthold.Where("TrackingID").RegExp(re)); err != nil {
+		return nil, errors.Wrap(err, "fetching snap store mappings")
+	}
+	return storeMappings, nil
+}
 
-// 	return snaps, nil
-// }
-
-// // GetSnapshot gets one snapshot by ID.
-// func (d *Database) GetSnapshot(snapID string) (Snapshot, error) {
-// 	var snap Snapshot
-// 	if err := d.con.One("ID", snapID, &snap); err != nil {
-// 		return Snapshot{}, errors.Wrap(err, "fetching snapshot")
-// 	}
-
-// 	return snap, nil
-// }
+func (d *Database) DeleteSnapStoreMapping(trackingID string) error {
+	var storeMapping SnapStoreMapping
+	if err := d.con.Delete(trackingID, &storeMapping); err != nil {
+		return errors.Wrap(err, "deleting snap store mapping from db")
+	}
+	return nil
+}

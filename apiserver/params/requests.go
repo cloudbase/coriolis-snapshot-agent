@@ -4,7 +4,7 @@ type AddTrackedDiskRequest struct {
 	DevicePath string `json:"device_path"`
 }
 
-type CreateSnapStoreRequest struct {
+type CreateSnapStoreMappingRequest struct {
 	SnapStoreLocation string `json:"snapstore_location_id"`
 	TrackedDisk       string `json:"tracked_disk_id"`
 }

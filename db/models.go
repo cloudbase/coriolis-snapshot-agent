@@ -29,6 +29,12 @@ func (s SnapStore) Path() string {
 	return filepath.Join(s.StorageLocation.Path, s.SnapStoreID)
 }
 
+type SnapStoreMapping struct {
+	TrackingID             string
+	TrackedDisk            TrackedDisk
+	SnapStoreFilesLocation SnapStoreFilesLocation
+}
+
 // SnapStoreFilesLocation holds
 type SnapStoreFilesLocation struct {
 	TrackingID string
@@ -92,21 +98,34 @@ type Image struct {
 	Minor      uint32
 }
 
-// SnapshotTracker holds the ID of a snapshot. A snapshot ID in
-// veeamsnap can identify multiple disk snapshots, if multiple disks
-// were snapshot using a single ioctl call.
-type SnapshotTracker struct {
-	TrackingID string
-	SnapshotID uint64
+type SnapshotImage struct {
+	// DevicePath is the snapshot device path in /dev.
+	DevicePath string
+	Major      uint32
+	Minor      uint32
+}
+
+type VolumeSnapshot struct {
+	// SnapshotNumber is the ID of the snapshot, as saved
+	// in the CBT bitmap.
+	SnapshotNumber uint32
+	// GenerationID is the generation ID of this snapshot.
+	GenerationID string
+
+	// OriginalDevice is the device that was snapshot.
+	OriginalDevice TrackedDisk
+	// SnapshotImage is the resulting image that was created by the snapshot.
+	SnapshotImage SnapshotImage
+
+	SnapshotID string
 }
 
 type Snapshot struct {
-	TrackingID string
-	Tracker    SnapshotTracker
-	// Generation ID is recorded in the CBT bitmap
-	// of each device that is being snapshot.
-	GenerationID string
-	Number       uint32
-	TrackedDisk  TrackedDisk
-	Image        Image
+	// SnapshotID is the internal ID used to delete the snapshot
+	// once we are done with it.
+	SnapshotID string
+
+	// VolumeSnapshots is an array of all the disk snapshots that
+	// are included in this snapshot.
+	VolumeSnapshots []VolumeSnapshot
 }

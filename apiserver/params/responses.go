@@ -1,11 +1,5 @@
 package params
 
-import (
-	"coriolis-veeam-bridge/internal/types"
-
-	"github.com/google/uuid"
-)
-
 var (
 	// NotFoundResponse is returned when a resource is not found
 	NotFoundResponse = APIErrorResponse{
@@ -34,28 +28,6 @@ type ErrorResponse struct {
 type APIErrorResponse struct {
 	Error   string `json:"error"`
 	Details string `json:"details"`
-}
-
-type Volume struct {
-	Path               string
-	DeviceID           types.DevID
-	Snapshots          int32
-	LastSnapshotNumber int32
-	ActiveSnapshots    []VolumeSnapshot
-}
-
-type VolumeSnapshot struct {
-	// DevicePath is the snapshot device path in /dev
-	DevicePath string
-	// DeviceID is the major:minor number of the snapshot image
-	// created in /dev.
-	DeviceID types.DevID
-	// SnapshotID is the internal ID used to delete the snapshot
-	// once we are done with it.
-	SnapshotID uuid.UUID
-	// SnapshotNumber is the ID of the snapshot, as saved
-	// in the CBT bitmap.
-	SnapshotNumber int32
 }
 
 // Partition holds the information about a particular partition
@@ -185,5 +157,50 @@ type SnapStoreResponse struct {
 	ID                 string `json:"id"`
 	TrackedDiskID      string `json:"tracked_disk_id"`
 	StorageLocationID  string `json:"storage_location_id"`
-	TotalAllocatedSize uint64 `json:"total_allocated_size"`
+	AllocatedDiskSpace uint64 `json:"allocated_disk_space"`
+	StorageUsage       uint64 `json:"used_disk_space"`
+}
+
+type SnapStoreMappingResponse struct {
+	ID                string `json:"id"`
+	TrackedDiskID     string `json:"tracked_disk_id"`
+	StorageLocationID string `json:"storage_location_id"`
+}
+
+// type Volume struct {
+// 	Path               string
+// 	DeviceID           types.DevID
+// 	Snapshots          int32
+// 	LastSnapshotNumber int32
+// 	ActiveSnapshots    []VolumeSnapshot
+// }
+
+type SnapshotImage struct {
+	// DevicePath is the snapshot device path in /dev.
+	DevicePath string
+	Major      uint32
+	Minor      uint32
+}
+
+type VolumeSnapshot struct {
+	// SnapshotNumber is the ID of the snapshot, as saved
+	// in the CBT bitmap.
+	SnapshotNumber uint32
+	// GenerationID is the generation ID of this snapshot.
+	GenerationID string
+
+	// OriginalDevice is the device that was snapshot.
+	OriginalDevice BlockVolume
+	// SnapshotImage is the resulting image that was created by the snapshot.
+	SnapshotImage SnapshotImage
+}
+
+type SnapshotResponse struct {
+	// SnapshotID is the internal ID used to delete the snapshot
+	// once we are done with it.
+	SnapshotID string
+
+	// VolumeSnapshots is an array of all the disk snapshots that
+	// are included in this snapshot.
+	VolumeSnapshots []VolumeSnapshot
 }

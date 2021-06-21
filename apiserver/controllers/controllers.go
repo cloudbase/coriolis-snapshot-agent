@@ -66,28 +66,6 @@ func (a *APIController) ListSnapStoreLocations(w http.ResponseWriter, r *http.Re
 	json.NewEncoder(w).Encode(locations)
 }
 
-func (a *APIController) CreateSnapStoreHandler(w http.ResponseWriter, r *http.Request) {
-	// CreateSnapStore
-	var newSnapData params.CreateSnapStoreRequest
-	if err := json.NewDecoder(r.Body).Decode(&newSnapData); err != nil {
-		handleError(w, vErrors.ErrBadRequest)
-		return
-	}
-
-	if newSnapData.SnapStoreLocation == "" || newSnapData.TrackedDisk == "" {
-		handleError(w, vErrors.ErrBadRequest)
-		return
-	}
-
-	response, err := a.mgr.CreateSnapStore(newSnapData)
-	if err != nil {
-		log.Printf("failed to get disk: %+v", err)
-		handleError(w, err)
-		return
-	}
-	json.NewEncoder(w).Encode(response)
-}
-
 func (a *APIController) ListSnapStoreHandler(w http.ResponseWriter, r *http.Request) {
 	snapStores, err := a.mgr.ListSnapStores()
 	if err != nil {
@@ -98,6 +76,67 @@ func (a *APIController) ListSnapStoreHandler(w http.ResponseWriter, r *http.Requ
 	json.NewEncoder(w).Encode(snapStores)
 }
 
+// Snapshots
+func (a *APIController) CreateSnapshotHandler(w http.ResponseWriter, r *http.Request) {
+	var newSnapshot params.CreateSnapshotRequest
+	if err := json.NewDecoder(r.Body).Decode(&newSnapshot); err != nil {
+		handleError(w, vErrors.ErrBadRequest)
+		return
+	}
+
+	err := a.mgr.CreateSnapshot(newSnapshot)
+	if err != nil {
+		log.Printf("failed to get disk: %+v", err)
+		handleError(w, err)
+		return
+	}
+	json.NewEncoder(w).Encode(newSnapshot)
+}
+
+func (a *APIController) ListSnapshotsHandler(w http.ResponseWriter, r *http.Request) {
+}
+
+func (a *APIController) GetSnapshotHandler(w http.ResponseWriter, r *http.Request) {
+}
+
+func (a *APIController) DeleteSnapshotHandler(w http.ResponseWriter, r *http.Request) {
+}
+
+// Snap store mappings
+
+func (a *APIController) CreateSnapStoreMappingHandler(w http.ResponseWriter, r *http.Request) {
+	// CreateSnapStore
+	var newSnapData params.CreateSnapStoreMappingRequest
+	if err := json.NewDecoder(r.Body).Decode(&newSnapData); err != nil {
+		handleError(w, vErrors.ErrBadRequest)
+		return
+	}
+
+	if newSnapData.SnapStoreLocation == "" || newSnapData.TrackedDisk == "" {
+		handleError(w, vErrors.ErrBadRequest)
+		return
+	}
+
+	response, err := a.mgr.CreateSnapStoreMapping(newSnapData)
+	if err != nil {
+		log.Printf("failed to get disk: %+v", err)
+		handleError(w, err)
+		return
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+func (a *APIController) ListSnapStoreMappingsHandler(w http.ResponseWriter, r *http.Request) {
+	snapStores, err := a.mgr.ListSnapStoreMappings()
+	if err != nil {
+		log.Printf("failed to get disk: %+v", err)
+		handleError(w, err)
+		return
+	}
+	json.NewEncoder(w).Encode(snapStores)
+}
+
+// utils
 func parseBoolParam(arg string, defaultValue bool) bool {
 	if arg == "" {
 		return defaultValue
