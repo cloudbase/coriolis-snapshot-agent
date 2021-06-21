@@ -104,7 +104,7 @@ type SnapshotImage struct {
 	DevicePath string
 	Major      uint32
 	Minor      uint32
-	SnapshotID uint64
+	SnapshotID string
 }
 
 type VolumeSnapshot struct {
@@ -121,13 +121,14 @@ type VolumeSnapshot struct {
 	SnapshotImage SnapshotImage
 
 	Bitmap     []byte
-	SnapshotID uint64
+	SnapshotID string
+	SnapStore  SnapStore
 }
 
 type Snapshot struct {
 	// SnapshotID is the internal ID used to delete the snapshot
 	// once we are done with it.
-	SnapshotID uint64
+	SnapshotID string
 
 	// VolumeSnapshots is an array of all the disk snapshots that
 	// are included in this snapshot.

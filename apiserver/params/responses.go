@@ -182,6 +182,13 @@ type SnapshotImage struct {
 	Minor      uint32
 }
 
+type TrackedDevice struct {
+	// DevicePath is the snapshot device path in /dev.
+	DevicePath string
+	Major      uint32
+	Minor      uint32
+}
+
 type VolumeSnapshot struct {
 	// SnapshotNumber is the ID of the snapshot, as saved
 	// in the CBT bitmap.
@@ -190,7 +197,7 @@ type VolumeSnapshot struct {
 	GenerationID string
 
 	// OriginalDevice is the device that was snapshot.
-	OriginalDevice BlockVolume
+	OriginalDevice TrackedDevice
 	// SnapshotImage is the resulting image that was created by the snapshot.
 	SnapshotImage SnapshotImage
 }

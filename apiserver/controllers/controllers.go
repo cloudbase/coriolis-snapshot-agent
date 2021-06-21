@@ -84,22 +84,42 @@ func (a *APIController) CreateSnapshotHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	err := a.mgr.CreateSnapshot(newSnapshot)
+	snap, err := a.mgr.CreateSnapshot(newSnapshot)
 	if err != nil {
 		log.Printf("failed to get disk: %+v", err)
 		handleError(w, err)
 		return
 	}
-	json.NewEncoder(w).Encode(newSnapshot)
+	json.NewEncoder(w).Encode(snap)
 }
 
 func (a *APIController) ListSnapshotsHandler(w http.ResponseWriter, r *http.Request) {
+	snaps, err := a.mgr.ListSnapshots()
+	if err != nil {
+		log.Printf("failed to get disk: %+v", err)
+		handleError(w, err)
+		return
+	}
+	json.NewEncoder(w).Encode(snaps)
 }
 
 func (a *APIController) GetSnapshotHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *APIController) DeleteSnapshotHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	snapshotID, ok := vars["snapshotID"]
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	if err := a.mgr.DeleteSnaphot(snapshotID); err != nil {
+		log.Printf("failed to get disk: %+v", err)
+		handleError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 }
 
 // Snap store mappings

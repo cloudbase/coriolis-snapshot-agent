@@ -95,11 +95,11 @@ func (d *Database) RemoveTrackedDisk(device types.DevID) error {
 // Snapshots //
 ///////////////
 // GetSnapshot gets one snapshot entity, identified by snapID, from the database.
-func (d *Database) GetSnapshot(snapID uint64) (Snapshot, error) {
+func (d *Database) GetSnapshot(snapID string) (Snapshot, error) {
 	var snapshot Snapshot
 	if err := d.con.FindOne(&snapshot, bolthold.Where("SnapshotID").Eq(snapID)); err != nil {
 		if errors.Is(err, bolthold.ErrNotFound) {
-			return snapshot, vErrors.NewNotFoundError("snapshot ID %s not found in db", snapID)
+			return snapshot, vErrors.NewNotFoundError("snapshot ID %d not found in db", snapID)
 		}
 		return snapshot, errors.Wrap(err, "finding location in db")
 	}
@@ -109,7 +109,7 @@ func (d *Database) GetSnapshot(snapID uint64) (Snapshot, error) {
 func (d *Database) ListSnapshotsForDisk(diskID string) ([]Snapshot, error) {
 	var volumeSnaps []VolumeSnapshot
 	if err := d.con.Find(&volumeSnaps, bolthold.Where("OriginalDevice.TrackingID").Eq(diskID)); err != nil {
-		return []Snapshot{}, errors.Wrap(err, "fetching records")
+		return []Snapshot{}, errors.Wrap(err, "finding volume snapshots for disk")
 	}
 
 	var snapshots []Snapshot
@@ -118,8 +118,8 @@ func (d *Database) ListSnapshotsForDisk(diskID string) ([]Snapshot, error) {
 		snapshotIDs[idx] = val.SnapshotID
 	}
 
-	if err := d.con.Find(&snapshots, bolthold.Where("SnapshotID").In(snapshotIDs)); err != nil {
-		return []Snapshot{}, errors.Wrap(err, "fetching records")
+	if err := d.con.Find(&snapshots, bolthold.Where("SnapshotID").In(snapshotIDs...)); err != nil {
+		return []Snapshot{}, errors.Wrap(err, "fetching snapshots for disk by disk ID")
 	}
 
 	return snapshots, nil
@@ -131,7 +131,7 @@ func (d *Database) ListAllSnapshots() ([]Snapshot, error) {
 
 	re := regexp.MustCompile(".*")
 	if err := d.con.Find(&snapshots, bolthold.Where("SnapshotID").RegExp(re)); err != nil {
-		return []Snapshot{}, errors.Wrap(err, "fetching records")
+		return []Snapshot{}, errors.Wrap(err, "listing all snapshots")
 	}
 
 	return snapshots, nil
@@ -146,7 +146,7 @@ func (d *Database) CreateSnapshot(param Snapshot) (Snapshot, error) {
 }
 
 // DeleteSnapshot deletes a snapshot entity from the databse.
-func (d *Database) DeleteSnapshot(snapshotID uint64) error {
+func (d *Database) DeleteSnapshot(snapshotID string) error {
 	snap, err := d.GetSnapshot(snapshotID)
 	if err != nil {
 		if !errors.Is(err, vErrors.ErrNotFound) {
@@ -227,7 +227,7 @@ func (d *Database) CreateVolumeSnapshot(param VolumeSnapshot) (VolumeSnapshot, e
 func (d *Database) DeleteSnapshotImage(snapshotImageID string) error {
 	param := SnapshotImage{}
 	if err := d.con.Delete(snapshotImageID, &param); err != nil {
-		return errors.Wrap(err, "deleting snapshot image from db")
+		return errors.Wrapf(err, "deleting snapshot image %s from db", snapshotImageID)
 	}
 	return nil
 }
@@ -276,6 +276,13 @@ func (d *Database) GetSnapStore(storeID string) (SnapStore, error) {
 	return store, nil
 }
 
+func (d *Database) UpdateSnapStore(param SnapStore) error {
+	if err := d.con.Update(param.SnapStoreID, &param); err != nil {
+		return errors.Wrap(err, "updating snap store in db")
+	}
+	return nil
+}
+
 // GetSnapStore fetches one snap store entity from the database.
 func (d *Database) GetSnapStoreByDiskID(diskID string) (SnapStore, error) {
 	var store SnapStore
@@ -293,7 +300,7 @@ func (d *Database) ListSnapStores() ([]SnapStore, error) {
 	var stores []SnapStore
 	re := regexp.MustCompile(".*")
 	if err := d.con.Find(&stores, bolthold.Where("SnapStoreID").RegExp(re)); err != nil {
-		return nil, errors.Wrap(err, "fetching records")
+		return nil, errors.Wrap(err, "listing snapstores")
 	}
 	return stores, nil
 }

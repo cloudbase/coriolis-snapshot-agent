@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"coriolis-veeam-bridge/apiserver/params"
+	"coriolis-veeam-bridge/db"
 	"coriolis-veeam-bridge/manager"
 
 	"github.com/pkg/errors"
@@ -40,7 +40,7 @@ type SnapStoreTracker struct {
 	watcherWorkerQuit chan struct{}
 	notifyWorkerQuit  chan struct{}
 
-	snapStores []params.SnapStoreResponse
+	snapStores []db.SnapStore
 	mux        sync.Mutex
 }
 
@@ -69,16 +69,16 @@ func (s *SnapStoreTracker) Wait() error {
 	}
 }
 
-func (s *SnapStoreTracker) ensureStorageForSnapStore(store params.SnapStoreResponse) error {
+func (s *SnapStoreTracker) ensureStorageForSnapStore(store db.SnapStore) error {
 	s.mux.Lock()
 	defer s.mux.Unlock()
 
 	// store, err := s.mgr.GetSnapStoreFilesLocation()
-	disk, err := s.mgr.GetTrackedDisk(store.TrackedDiskID)
+	disk, err := s.mgr.GetTrackedDisk(store.TrackedDisk.TrackingID)
 	if err != nil {
 		return errors.Wrap(err, "fetching disk")
 	}
-	snapStore, err := s.mgr.GetSnapStore(store.ID)
+	snapStore, err := s.mgr.GetSnapStore(store.SnapStoreID)
 	if err != nil {
 		return errors.Wrap(err, "fetching store info")
 	}
@@ -103,13 +103,14 @@ func (s *SnapStoreTracker) ensureStorageForSnapStore(store params.SnapStoreRespo
 		return nil
 	}
 
+	allocationSize = minimumSpaceForStore
 	usedPercent := uint64(snapStore.StorageUsage) * 100 / snapStore.AllocatedDiskSpace
 	remainingSpace := snapStore.AllocatedDiskSpace - snapStore.StorageUsage
 
 	if remainingSpace < minimumSpaceForStore {
 		log.Printf("snap store %s usage is %d out of %d (%d%%)", snapStore.ID, snapStore.StorageUsage, snapStore.AllocatedDiskSpace, usedPercent)
 		log.Printf("adding %d bytes to snap store %s", int64(allocationSize), snapStore.ID)
-		if err := s.mgr.AddCapacityToSnapStore(snapStore.ID, minimumSpaceForStore); err != nil {
+		if err := s.mgr.AddCapacityToSnapStore(snapStore.ID, allocationSize); err != nil {
 			return errors.Wrapf(err, "adding capacity to snap store %s", snapStore.ID)
 		}
 	}
@@ -134,7 +135,7 @@ func (s *SnapStoreTracker) storageCapacityWatcher() {
 		case <-ticker.C:
 			for _, val := range s.snapStores {
 				if err := s.ensureStorageForSnapStore(val); err != nil {
-					log.Printf("failed to add storage to snap store %s: %q", val.ID, err)
+					log.Printf("failed to add storage to snap store %s: %q", val.SnapStoreID, err)
 				}
 			}
 		}
@@ -153,10 +154,10 @@ func (s *SnapStoreTracker) notifyWorker() {
 				return
 			}
 			switch val := msg.(type) {
-			case params.SnapStoreResponse:
+			case db.SnapStore:
 				found := false
 				for _, store := range s.snapStores {
-					if val.ID == store.ID {
+					if val.SnapStoreID == store.SnapStoreID {
 						found = true
 						break
 					}
@@ -166,7 +167,7 @@ func (s *SnapStoreTracker) notifyWorker() {
 				}
 				// Add initial storage chunk
 				if err := s.ensureStorageForSnapStore(val); err != nil {
-					log.Printf("failed to add storage to snap store %s: %q", val.ID, err)
+					log.Printf("failed to add storage to snap store %s: %q", val.SnapStoreID, err)
 				}
 				s.snapStores = append(s.snapStores, val)
 			default:
