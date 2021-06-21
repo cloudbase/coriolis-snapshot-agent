@@ -165,6 +165,18 @@ func (d *Database) GetSnapStore(storeID string) (SnapStore, error) {
 	return store, nil
 }
 
+// GetSnapStore fetches one snap store entity from the database.
+func (d *Database) GetSnapStoreByDiskID(diskID string) (SnapStore, error) {
+	var store SnapStore
+	if err := d.con.FindOne(&store, bolthold.Where("TrackedDisk.TrackingID").Eq(diskID)); err != nil {
+		if errors.Is(err, bolthold.ErrNotFound) {
+			return store, vErrors.NewNotFoundError("store not found in disk ID %s", diskID)
+		}
+		return store, errors.Wrap(err, "finding location in db")
+	}
+	return store, nil
+}
+
 // ListSnapStores fetches all snap store entities from the database.
 func (d *Database) ListSnapStores() ([]SnapStore, error) {
 	var stores []SnapStore

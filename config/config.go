@@ -8,7 +8,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/pkg/errors"
@@ -33,9 +32,9 @@ const (
 	// DefaultListenPort is the default HTTPS listen port
 	DefaultListenPort = 8899
 
-	// DefaultJWTTTL is the default duration in seconds a JWT token
-	// will be valid. Default 7 days.
-	DefaultJWTTTL time.Duration = 168 * time.Hour
+	// minimum amount of free space in a snap store (2 GB). Any less than this, and we add another
+	// 2 GB of space.
+	MinimumSpaceForStore uint64 = 2 * 1024 * 1024 * 1024
 )
 
 // ParseConfig parses the file passed in as cfgFile and returns

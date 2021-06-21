@@ -833,10 +833,58 @@ func (m *Snapshot) ListSnapStoreMappings() ([]params.SnapStoreMappingResponse, e
 // Snapshots //
 ///////////////
 
+func (m *Snapshot) ensureSnapStoreForDisk(diskID string) error {
+	trackedDisk, err := m.db.GetTrackedDiskByTrackingID(diskID)
+	if err != nil {
+		return errors.Wrap(err, "fetching disk info")
+	}
+
+	_, err = m.db.GetSnapStoreByDiskID(trackedDisk.TrackingID)
+	if err != nil {
+		if !errors.Is(err, vErrors.ErrNotFound) {
+			return errors.Wrap(err, "fetching snap stores")
+		}
+	} else {
+		return nil
+	}
+
+	mapping, err := m.db.GetSnapStoreMappingByDeviceID(diskID)
+	if err != nil {
+		return errors.Wrap(err, "fetching mapping")
+	}
+
+	newStore, err := m.CreateSnapStore(
+		mapping.TrackedDisk.TrackingID, mapping.SnapStoreFilesLocation.TrackingID)
+	if err != nil {
+		return errors.Wrap(err, "creating snap store")
+	}
+
+	if err := m.AddCapacityToSnapStore(newStore.ID, config.MinimumSpaceForStore); err != nil {
+		return errors.Wrapf(err, "adding capacity to snap store %s", newStore.ID)
+	}
+	return nil
+}
+
 // CreateSnapshot creates a new snapshot of one or more disks.
 func (m *Snapshot) CreateSnapshot(param params.CreateSnapshotRequest) error {
 	m.mux.Lock()
 	defer m.mux.Unlock()
+
+	var devices []types.DevID
+	for _, disk := range param.TrackedDiskIDs {
+		if err := m.ensureSnapStoreForDisk(disk); err != nil {
+			return errors.Wrap(err, "creating snap store")
+		}
+
+		dbDev, err := m.db.GetTrackedDiskByTrackingID(disk)
+		if err != nil {
+			return errors.Wrap(err, "getting device")
+		}
+		devices = append(devices, types.DevID{
+			Major: dbDev.Major,
+			Minor: dbDev.Minor,
+		})
+	}
 
 	info, err := ioctl.GetCBTInfo()
 	if err != nil {
@@ -856,18 +904,6 @@ func (m *Snapshot) CreateSnapshot(param params.CreateSnapshotRequest) error {
 
 	// js, _ := json.MarshalIndent(cbtInfo, "", "  ")
 	// fmt.Println(string(js))
-
-	var devices []types.DevID
-	for _, val := range param.TrackedDiskIDs {
-		dbDev, err := m.db.GetTrackedDiskByTrackingID(val)
-		if err != nil {
-			return errors.Wrap(err, "getting device")
-		}
-		devices = append(devices, types.DevID{
-			Major: dbDev.Major,
-			Minor: dbDev.Minor,
-		})
-	}
 
 	snapshot, err := ioctl.CreateSnapshot(devices)
 	if err != nil {
