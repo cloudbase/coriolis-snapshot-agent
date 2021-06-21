@@ -99,13 +99,16 @@ type Image struct {
 }
 
 type SnapshotImage struct {
+	TrackingID string
 	// DevicePath is the snapshot device path in /dev.
 	DevicePath string
 	Major      uint32
 	Minor      uint32
+	SnapshotID uint64
 }
 
 type VolumeSnapshot struct {
+	TrackingID string
 	// SnapshotNumber is the ID of the snapshot, as saved
 	// in the CBT bitmap.
 	SnapshotNumber uint32
@@ -117,13 +120,14 @@ type VolumeSnapshot struct {
 	// SnapshotImage is the resulting image that was created by the snapshot.
 	SnapshotImage SnapshotImage
 
-	SnapshotID string
+	Bitmap     []byte
+	SnapshotID uint64
 }
 
 type Snapshot struct {
 	// SnapshotID is the internal ID used to delete the snapshot
 	// once we are done with it.
-	SnapshotID string
+	SnapshotID uint64
 
 	// VolumeSnapshots is an array of all the disk snapshots that
 	// are included in this snapshot.

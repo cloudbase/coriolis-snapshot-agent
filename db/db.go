@@ -147,7 +147,118 @@ func (d *Database) CreateSnapshot(param Snapshot) (Snapshot, error) {
 
 // DeleteSnapshot deletes a snapshot entity from the databse.
 func (d *Database) DeleteSnapshot(snapshotID uint64) error {
+	snap, err := d.GetSnapshot(snapshotID)
+	if err != nil {
+		if !errors.Is(err, vErrors.ErrNotFound) {
+			return errors.Wrap(err, "fetching snapshot")
+		}
+		return nil
+	}
+
+	for _, vol := range snap.VolumeSnapshots {
+		if err := d.DeleteSnapshotImage(vol.SnapshotImage.TrackingID); err != nil {
+			if !errors.Is(err, vErrors.ErrNotFound) {
+				return errors.Wrapf(err, "removing snapshot image: %s", vol.SnapshotImage.TrackingID)
+			}
+		}
+		if err := d.DeleteVolumeSnapshot(vol.TrackingID); err != nil {
+			if !errors.Is(err, vErrors.ErrNotFound) {
+				return errors.Wrapf(err, "removing volume snapshot: %s", vol.TrackingID)
+			}
+		}
+	}
+
+	param := Snapshot{}
+	if err := d.con.Delete(snapshotID, &param); err != nil {
+		return errors.Wrap(err, "deleting snap store from db")
+	}
 	return nil
+}
+
+//////////////////////
+// Volume Snapshots //
+//////////////////////
+
+func (d *Database) GetVolumeSnapshotsBySnapshotID(snapshotID uint64) ([]VolumeSnapshot, error) {
+	var snapshots []VolumeSnapshot
+	if err := d.con.Find(&snapshots, bolthold.Where("SnapshotID").Eq(snapshotID)); err != nil {
+		return []VolumeSnapshot{}, errors.Wrap(err, "fetching volume snapshots")
+	}
+	return snapshots, nil
+}
+
+func (d *Database) GetVolumeSnapshotByID(volumeSnapID string) (VolumeSnapshot, error) {
+	var snapshots VolumeSnapshot
+	if err := d.con.FindOne(&snapshots, bolthold.Where("TrackingID").Eq(volumeSnapID)); err != nil {
+		if errors.Is(err, bolthold.ErrNotFound) {
+			return VolumeSnapshot{}, vErrors.NewNotFoundError("volume snapshot %s not found", volumeSnapID)
+		}
+		return VolumeSnapshot{}, errors.Wrap(err, "fetching volume snapshots")
+	}
+	return snapshots, nil
+}
+
+func (d *Database) DeleteVolumeSnapshot(volumeSnapID string) error {
+	if _, err := d.GetVolumeSnapshotByID(volumeSnapID); err != nil {
+		if !errors.Is(err, vErrors.ErrNotFound) {
+			return errors.Wrap(err, "fetching volume snapshot")
+		}
+		return nil
+	}
+
+	param := VolumeSnapshot{}
+	if err := d.con.Delete(volumeSnapID, &param); err != nil {
+		return errors.Wrap(err, "deleting volume snapshot from db")
+	}
+	return nil
+}
+
+func (d *Database) CreateVolumeSnapshot(param VolumeSnapshot) (VolumeSnapshot, error) {
+	if err := d.con.Insert(param.TrackingID, &param); err != nil {
+		return VolumeSnapshot{}, errors.Wrap(err, "inserting new volume image into db")
+	}
+	return param, nil
+}
+
+/////////////////////
+// Snapshot images //
+/////////////////////
+
+func (d *Database) DeleteSnapshotImage(snapshotImageID string) error {
+	param := SnapshotImage{}
+	if err := d.con.Delete(snapshotImageID, &param); err != nil {
+		return errors.Wrap(err, "deleting snapshot image from db")
+	}
+	return nil
+}
+
+func (d *Database) GetSnapshotImageByID(snapshotImageID string) (SnapshotImage, error) {
+	var snapshotImage SnapshotImage
+	if err := d.con.FindOne(&snapshotImage, bolthold.Where("TrackingID").Eq(snapshotImageID)); err != nil {
+		if errors.Is(err, bolthold.ErrNotFound) {
+			return SnapshotImage{}, vErrors.NewNotFoundError("snapshot image %s not found", snapshotImageID)
+		}
+		return SnapshotImage{}, errors.Wrap(err, "fetching snapshot image")
+	}
+	return snapshotImage, nil
+}
+
+func (d *Database) GetSnapshotImageBySnapshotID(snapshotID uint64) (SnapshotImage, error) {
+	var snapshotImage SnapshotImage
+	if err := d.con.FindOne(&snapshotImage, bolthold.Where("SnapshotID").Eq(snapshotID)); err != nil {
+		if errors.Is(err, bolthold.ErrNotFound) {
+			return SnapshotImage{}, vErrors.NewNotFoundError("snapshot image for snapshot ID %s not found", snapshotID)
+		}
+		return SnapshotImage{}, errors.Wrap(err, "fetching snapshot image")
+	}
+	return snapshotImage, nil
+}
+
+func (d *Database) CreateSnapshotImage(param SnapshotImage) (SnapshotImage, error) {
+	if err := d.con.Insert(param.TrackingID, &param); err != nil {
+		return SnapshotImage{}, errors.Wrap(err, "inserting new snapshot image into db")
+	}
+	return param, nil
 }
 
 /////////////////
