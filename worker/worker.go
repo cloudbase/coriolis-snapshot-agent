@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"coriolis-veeam-bridge/db"
+	vErrors "coriolis-veeam-bridge/errors"
 	"coriolis-veeam-bridge/manager"
 
 	"github.com/pkg/errors"
@@ -28,8 +29,9 @@ func NewSnapStorageTracker(ctx context.Context, mgr *manager.Snapshot) (*SnapSto
 		notify:            notifyChan,
 		watcherWorkerQuit: make(chan struct{}),
 		notifyWorkerQuit:  make(chan struct{}),
+		snapStores:        map[string]db.SnapStore{},
 	}
-	mgr.RegisterNotificationChannel(manager.SnapStoreCreateEvent, notifyChan)
+	mgr.RegisterNotificationChannel(manager.SnapStoreEvent, notifyChan)
 	return tracker, nil
 }
 
@@ -40,7 +42,7 @@ type SnapStoreTracker struct {
 	watcherWorkerQuit chan struct{}
 	notifyWorkerQuit  chan struct{}
 
-	snapStores []db.SnapStore
+	snapStores map[string]db.SnapStore
 	mux        sync.Mutex
 }
 
@@ -80,7 +82,11 @@ func (s *SnapStoreTracker) ensureStorageForSnapStore(store db.SnapStore) error {
 	}
 	snapStore, err := s.mgr.GetSnapStore(store.SnapStoreID)
 	if err != nil {
-		return errors.Wrap(err, "fetching store info")
+		if !errors.Is(err, vErrors.ErrNotFound) {
+			return errors.Wrap(err, "fetching store info")
+		}
+		delete(s.snapStores, store.SnapStoreID)
+		return nil
 	}
 
 	location, err := s.mgr.GetSnapStoreFilesLocationByID(snapStore.StorageLocationID)
@@ -144,6 +150,7 @@ func (s *SnapStoreTracker) storageCapacityWatcher() {
 
 func (s *SnapStoreTracker) notifyWorker() {
 	log.Printf("Starting snap storage notify watcher")
+
 	defer close(s.notifyWorkerQuit)
 	for {
 		select {
@@ -155,21 +162,10 @@ func (s *SnapStoreTracker) notifyWorker() {
 			}
 			switch val := msg.(type) {
 			case db.SnapStore:
-				found := false
-				for _, store := range s.snapStores {
-					if val.SnapStoreID == store.SnapStoreID {
-						found = true
-						break
-					}
-				}
-				if found {
+				if _, ok := s.snapStores[val.SnapStoreID]; ok {
 					continue
 				}
-				// Add initial storage chunk
-				if err := s.ensureStorageForSnapStore(val); err != nil {
-					log.Printf("failed to add storage to snap store %s: %q", val.SnapStoreID, err)
-				}
-				s.snapStores = append(s.snapStores, val)
+				s.snapStores[val.SnapStoreID] = val
 			default:
 				log.Printf("got invalid payload of type %T", val)
 			}

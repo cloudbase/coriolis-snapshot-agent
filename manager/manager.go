@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
@@ -28,7 +29,7 @@ import (
 type NotificationType string
 
 var (
-	SnapStoreCreateEvent NotificationType = "snapStoreCreate"
+	SnapStoreEvent NotificationType = "snapStoreCreate"
 )
 
 func NewManager(cfg *config.Config) (manager *Snapshot, err error) {
@@ -859,7 +860,7 @@ func (m *Snapshot) ensureSnapStoreForDisk(diskID string) (db.SnapStore, error) {
 	if err := m.AddCapacityToSnapStore(newStore.SnapStoreID, config.MinimumSpaceForStore); err != nil {
 		return db.SnapStore{}, errors.Wrapf(err, "adding capacity to snap store %s", newStore.SnapStoreID)
 	}
-	m.SendNotify(SnapStoreCreateEvent, newStore)
+	m.SendNotify(SnapStoreEvent, newStore)
 	return newStore, nil
 }
 
@@ -1087,6 +1088,9 @@ func internalSnapToSnapResponse(snap db.Snapshot) params.SnapshotResponse {
 }
 
 func (m *Snapshot) DeleteSnaphot(snapshotID string) error {
+	m.mux.Lock()
+	defer m.mux.Unlock()
+
 	snapshot, err := m.db.GetSnapshot(snapshotID)
 	if err != nil {
 		if !errors.Is(err, vErrors.ErrNotFound) {
@@ -1112,8 +1116,25 @@ func (m *Snapshot) DeleteSnaphot(snapshotID string) error {
 		snapStoreInternal := types.SnapStore{
 			ID: [16]byte(snapStoreUUID),
 		}
-		if _, err := ioctl.SnapStoreCleanup(snapStoreInternal); err != nil {
-			return errors.Wrap(err, "cleaning snap store")
+
+		count := 0
+		for {
+			if count == 5 {
+				break
+			}
+			filledBytes, err := ioctl.SnapStoreCleanup(snapStoreInternal)
+			if err != nil {
+				return errors.Wrap(err, "cleaning snap store")
+			}
+			if filledBytes.FilledBytes == ioctl.SNAP_STORE_NOT_FOUND {
+				break
+			}
+			count++
+			time.Sleep(1 * time.Second)
+		}
+
+		if err := m.db.DeleteSnapStore(vol.SnapStore.SnapStoreID); err != nil {
+			return errors.Wrap(err, "deleting snap store")
 		}
 		if err := os.RemoveAll(vol.SnapStore.Path()); err != nil {
 			if !errors.Is(err, fs.ErrNotExist) {
@@ -1245,7 +1266,7 @@ func (m *Snapshot) PopulateSnapStoreWatcher() error {
 	}
 
 	for _, store := range stores {
-		m.SendNotify(SnapStoreCreateEvent, store)
+		m.SendNotify(SnapStoreEvent, store)
 	}
 	return nil
 }
