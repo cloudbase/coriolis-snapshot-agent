@@ -7,6 +7,7 @@ type TrackedDisk struct {
 	Path       string
 	Major      uint32
 	Minor      uint32
+	SectorSize uint32
 }
 
 // SnapStore is the database representation of a veeamsnap snap store.

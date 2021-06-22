@@ -191,12 +191,12 @@ func GetTrackingBlockSize() (uint32, error) {
 	}
 	defer dev.Close()
 
-	var blkSize uint32
+	blkSize := C.uint(0)
 	r1, _, err := syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), IOCTL_TRACKING_BLOCK_SIZE, uintptr(unsafe.Pointer(&blkSize)))
 	if r1 != 0 {
 		return 0, errors.Wrap(err, "running ioctl")
 	}
-	return blkSize, nil
+	return uint32(blkSize), nil
 }
 
 func GetCBTBitmap(device types.DevID) (types.TrackingReadCBTBitmap, error) {

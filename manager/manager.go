@@ -120,6 +120,16 @@ func (m *Snapshot) SendNotify(notifyType NotificationType, payload interface{}) 
 	}
 }
 
+// Expose the internal mutex. We need to lock the manager while we download ranges.
+// TODO: find a better solution for this.
+func (m *Snapshot) Lock() {
+	m.mux.Lock()
+}
+
+func (m *Snapshot) Unlock() {
+	m.mux.Unlock()
+}
+
 // internalBlockVolumeToParamsBlockVolume converts an internal block volume
 // to a params block volume. We copy the values because we want to be free to
 // change de underlying storage implementation in the future, without changing
@@ -320,6 +330,7 @@ func (m *Snapshot) AddTrackedDisk(disk params.AddTrackedDiskRequest) (params.Blo
 			Path:       volume.Path,
 			Major:      volume.Major,
 			Minor:      volume.Minor,
+			SectorSize: uint32(volume.LogicalSectorSize),
 		}
 
 		dbObject, err = m.db.CreateTrackedDisk(addDevParams)
@@ -864,12 +875,34 @@ func (m *Snapshot) ensureSnapStoreForDisk(diskID string) (db.SnapStore, error) {
 	return newStore, nil
 }
 
+func filterCBTInfo(info []types.CBTInfo, dev types.DevID) (types.CBTInfo, error) {
+	for _, val := range info {
+		if val.DevID.Major == dev.Major && val.DevID.Minor == dev.Minor {
+			return val, nil
+		}
+	}
+	return types.CBTInfo{}, vErrors.NewNotFoundError("could not find CBT info for device %d:%d", dev.Major, dev.Minor)
+}
+
 // CreateSnapshot creates a new snapshot of one or more disks.
 func (m *Snapshot) CreateSnapshot(param params.CreateSnapshotRequest) (params.SnapshotResponse, error) {
 	m.mux.Lock()
 	defer m.mux.Unlock()
 	var err error
 
+	// Taking multiple snapshots of the same disk seems to be unstable. Limit to one active
+	// snapshot per disk.
+	for _, disk := range param.TrackedDiskIDs {
+		snap, err := m.db.ListSnapshotsForDisk(disk)
+		if err != nil {
+			return params.SnapshotResponse{}, errors.Wrap(err, "listing snapshot")
+		}
+		if len(snap) > 0 {
+			return params.SnapshotResponse{}, vErrors.NewConflictError("disk %s already has a snapshot", disk)
+		}
+	}
+
+	// Ensure snap stores
 	var devices []types.DevID
 	trackedDiskMap := map[types.DevID]db.TrackedDisk{}
 	snapStoreMap := map[types.DevID]db.SnapStore{}
@@ -894,6 +927,7 @@ func (m *Snapshot) CreateSnapshot(param params.CreateSnapshotRequest) (params.Sn
 		snapStoreMap[newDev] = store
 	}
 
+	// Cleanup snap stores in case of error
 	defer func() {
 		if err != nil {
 			for _, val := range snapStores {
@@ -916,6 +950,7 @@ func (m *Snapshot) CreateSnapshot(param params.CreateSnapshotRequest) (params.Sn
 		}
 	}()
 
+	// Gather info before snapshot
 	cbtInfoPreSnap, err := ioctl.GetCBTInfo()
 	if err != nil {
 		return params.SnapshotResponse{}, errors.Wrap(err, "fetching CBT info")
@@ -926,21 +961,22 @@ func (m *Snapshot) CreateSnapshot(param params.CreateSnapshotRequest) (params.Sn
 		return params.SnapshotResponse{}, errors.Wrap(err, "collecting images")
 	}
 
+	// Create snapshot
 	snapshot, err := ioctl.CreateSnapshot(devices)
 	if err != nil {
 		return params.SnapshotResponse{}, errors.Wrap(err, "creating snapshot")
 	}
 
+	// cleanup func in case of error
 	defer func() {
 		if err != nil {
 			ioctl.DeleteSnapshot(snapshot.SnapshotID)
-
 		}
 	}()
 
+	// Gather info post-snap
 	cbtInfoPostSnap, err := ioctl.GetCBTInfo()
 	if err != nil {
-		fmt.Printf("%+v\n", err)
 		return params.SnapshotResponse{}, errors.Wrap(err, "fetching CBT info")
 	}
 
@@ -949,6 +985,7 @@ func (m *Snapshot) CreateSnapshot(param params.CreateSnapshotRequest) (params.Sn
 		return params.SnapshotResponse{}, errors.Wrap(err, "collecting images")
 	}
 
+	// create DB objects
 	newSnapshotParams := db.Snapshot{
 		SnapshotID: fmt.Sprintf("%d", snapshot.SnapshotID),
 	}
@@ -962,22 +999,24 @@ func (m *Snapshot) CreateSnapshot(param params.CreateSnapshotRequest) (params.Sn
 			OriginalDevice: dbDev,
 		}
 
-		var cbtInfoNew types.CBTInfo
-		// find CBTInfo For device. Yes, I know this is atrocious.
-		for _, cbtInfoPre := range cbtInfoPreSnap {
-			if cbtInfoPre.DevID == dev {
-				for _, cbtInfoPost := range cbtInfoPostSnap {
-					if cbtInfoPost.DevID == dev {
-						diff := int(cbtInfoPost.SnapNumber) - int(cbtInfoPre.SnapNumber)
-						if diff != 1 {
-							return params.SnapshotResponse{}, errors.Errorf("failed to determine proper CBT info for device: %d:%d", dev.Major, dev.Minor)
-						}
-						cbtInfoNew = cbtInfoPost
-					}
-				}
-			}
+		cbtInfoNew, err := filterCBTInfo(cbtInfoPostSnap, dev)
+		if err != nil {
+			return params.SnapshotResponse{}, errors.Wrap(err, "finding cbt info")
+		}
+		cbtInfoOld, err := filterCBTInfo(cbtInfoPreSnap, dev)
+		if err != nil {
+			return params.SnapshotResponse{}, errors.Wrap(err, "finding cbt info")
 		}
 
+		diff := int(cbtInfoNew.SnapNumber) - int(cbtInfoOld.SnapNumber)
+		if diff != 1 {
+			// Note (gsamfira): Neither the snap number, nor the image info get returned by the
+			// create snapshot ioctl, so we have to resort to hacks like this to find out
+			// what new resources we have after taking a snapshot. I still hope that there is
+			// an easier way to get this info, and it's just my ignorance that lead to this mess.
+			// Will investigate later.
+			return params.SnapshotResponse{}, errors.Errorf("failed to determine proper CBT info for device: %d:%d", dev.Major, dev.Minor)
+		}
 		volumeSnapshot.SnapshotNumber = uint32(cbtInfoNew.SnapNumber)
 		volumeSnapshot.GenerationID = uuid.UUID(cbtInfoNew.GenerationID).String()
 
@@ -997,12 +1036,28 @@ func (m *Snapshot) CreateSnapshot(param params.CreateSnapshotRequest) (params.Sn
 			}
 		}
 		if len(images) != 1 {
+			// something else created a snapshot while we were processing this function.
 			return params.SnapshotResponse{}, errors.Errorf("expected to find 1 new image, found %d", len(images))
 		}
 
-		devFromID, err := storage.FindDeviceByID(images[0].SnapshotDevID.Major, images[0].SnapshotDevID.Minor)
-		if err != nil {
-			return params.SnapshotResponse{}, errors.Errorf("failed to find image device by ID %d:%d", images[0].SnapshotDevID.Major, images[0].SnapshotDevID.Minor)
+		var devFromID string
+		attempts := 0
+		for {
+			// We can listen to netlink instead of polling a few times, but this will do for now.
+			// TODO (gsamfira): replace this with udev listener.
+			if attempts >= 5 {
+				return params.SnapshotResponse{}, errors.Errorf("failed to find image device by ID %d:%d", images[0].SnapshotDevID.Major, images[0].SnapshotDevID.Minor)
+			}
+			devFromID, err = storage.FindDeviceByID(images[0].SnapshotDevID.Major, images[0].SnapshotDevID.Minor)
+			if err != nil {
+				if !errors.Is(err, vErrors.ErrNotFound) {
+					return params.SnapshotResponse{}, errors.Wrapf(err, "failed to find image device by ID %d:%d", images[0].SnapshotDevID.Major, images[0].SnapshotDevID.Minor)
+				}
+				attempts++
+				time.Sleep(1 * time.Second)
+				continue
+			}
+			break
 		}
 
 		// Record resources in the database
@@ -1063,6 +1118,7 @@ func internalVolumeSnapToParamvolumeSnap(vol db.VolumeSnapshot) params.VolumeSna
 		SnapshotNumber: vol.SnapshotNumber,
 		GenerationID:   vol.GenerationID,
 		OriginalDevice: params.TrackedDevice{
+			TrackingID: vol.OriginalDevice.TrackingID,
 			DevicePath: vol.OriginalDevice.Path,
 			Major:      vol.OriginalDevice.Major,
 			Minor:      vol.OriginalDevice.Minor,
@@ -1152,12 +1208,30 @@ func (m *Snapshot) DeleteSnaphot(snapshotID string) error {
 	return nil
 }
 
-func (m *Snapshot) GetSnapshot(snapshotID uint64) (params.SnapshotResponse, error) {
-	// snapshot, err := m.db.GetSnapshot(snapshotID)
-	// if err != nil {
-	// 	return db.Snapshot{}, errors.Wrap(err, "fetching snapshot from DB")
-	// }
-	return params.SnapshotResponse{}, nil
+func (m *Snapshot) GetSnapshot(snapshotID string) (params.SnapshotResponse, error) {
+	snapshot, err := m.db.GetSnapshot(snapshotID)
+	if err != nil {
+		return params.SnapshotResponse{}, errors.Wrap(err, "fetching snapshot from DB")
+	}
+	return internalSnapToSnapResponse(snapshot), nil
+}
+
+func (m *Snapshot) FindVolumeSnapshotForDisk(snapshotID string, diskTrackingID string) (db.VolumeSnapshot, error) {
+	snap, err := m.db.GetSnapshot(snapshotID)
+	if err != nil {
+		return db.VolumeSnapshot{}, errors.Wrap(err, "fetching snapshot from DB")
+	}
+
+	var volSnap db.VolumeSnapshot
+	for _, val := range snap.VolumeSnapshots {
+		if val.OriginalDevice.TrackingID == diskTrackingID {
+			volSnap = val
+		}
+	}
+	if volSnap.OriginalDevice.TrackingID == "" {
+		return db.VolumeSnapshot{}, vErrors.NewNotFoundError("could not find volume snapshot for %s", diskTrackingID)
+	}
+	return volSnap, nil
 }
 
 func (m *Snapshot) ListSnapshots() ([]params.SnapshotResponse, error) {
@@ -1172,6 +1246,79 @@ func (m *Snapshot) ListSnapshots() ([]params.SnapshotResponse, error) {
 		ret[idx] = internalSnapToSnapResponse(snap)
 	}
 	return ret, nil
+}
+
+// Snapshot consumption
+
+func (m *Snapshot) fetchIncrements(bitmap []byte, prevNumber, currentNumber int, cbtBlkSize int) []params.DiskRange {
+	var ranges []params.DiskRange
+	var tmpStartSector int
+	var tmpLength int
+	for i := 0; i < len(bitmap); i++ {
+		if prevNumber != 0 {
+			if int(bitmap[i]) <= prevNumber || int(bitmap[i]) > currentNumber {
+				continue
+			}
+			if tmpStartSector == 0 {
+				tmpStartSector = i
+				tmpLength = int(cbtBlkSize)
+				continue
+			}
+		}
+
+		if tmpStartSector*cbtBlkSize+tmpLength != i*cbtBlkSize {
+			ranges = append(ranges, params.DiskRange{
+				StartOffset: uint64(tmpStartSector * cbtBlkSize),
+				Length:      uint64(tmpLength),
+			})
+			tmpStartSector = i
+			tmpLength = cbtBlkSize
+			continue
+		}
+		tmpLength += cbtBlkSize
+	}
+
+	ranges = append(ranges, params.DiskRange{
+		StartOffset: uint64(tmpStartSector * cbtBlkSize),
+		Length:      uint64(tmpLength),
+	})
+	return ranges
+}
+
+func (m *Snapshot) GetChangedSectors(currentSnapshotID string, trackedDiskID string, previousGenerationID string, previousNumber uint32) (params.ChangesResponse, error) {
+	if previousGenerationID != "" {
+		if _, err := uuid.Parse(previousGenerationID); err != nil {
+			return params.ChangesResponse{}, errors.Wrap(err, "parsing generation ID")
+		}
+	}
+	volumeSnapshot, err := m.FindVolumeSnapshotForDisk(currentSnapshotID, trackedDiskID)
+	if err != nil {
+		return params.ChangesResponse{}, errors.Wrap(err, "finding volume snapshot")
+	}
+
+	var backupType params.BackupType = params.BackupTypeIncremental
+	if previousNumber == 0 || previousGenerationID != volumeSnapshot.GenerationID {
+		backupType = params.BackupTypeFull
+		// gets full disk
+		previousNumber = 0
+	}
+
+	cbtBlkSize, err := ioctl.GetTrackingBlockSize()
+	if err != nil {
+		return params.ChangesResponse{}, errors.Wrap(err, "fetching CBT block size")
+	}
+
+	ranges := m.fetchIncrements(volumeSnapshot.Bitmap, int(previousNumber), int(volumeSnapshot.SnapshotNumber), int(cbtBlkSize))
+	if err != nil {
+		return params.ChangesResponse{}, errors.Wrap(err, "fetching ranges")
+	}
+	return params.ChangesResponse{
+		TrackedDiskID: trackedDiskID,
+		SnapshotID:    currentSnapshotID,
+		BackupType:    backupType,
+		CBTBlockSize:  int(cbtBlkSize),
+		Ranges:        ranges,
+	}, nil
 }
 
 // Init functions.

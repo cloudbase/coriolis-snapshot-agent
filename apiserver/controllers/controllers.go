@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
@@ -154,6 +156,63 @@ func (a *APIController) ListSnapStoreMappingsHandler(w http.ResponseWriter, r *h
 		return
 	}
 	json.NewEncoder(w).Encode(snapStores)
+}
+
+func (a *APIController) GetChangedSectorsHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	snapshotID := vars["snapshotID"]
+	if snapshotID == "" {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	trackedDisk := vars["trackedDiskID"]
+	if trackedDisk == "" {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	prevGenID := r.URL.Query().Get("previousGenerationID")
+	prevNum, _ := strconv.ParseUint(r.URL.Query().Get("previousNumber"), 10, 32)
+
+	ranges, err := a.mgr.GetChangedSectors(snapshotID, trackedDisk, prevGenID, uint32(prevNum))
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+	json.NewEncoder(w).Encode(ranges)
+}
+
+func (a *APIController) ConsumeSnapshotHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	snapshotID := vars["snapshotID"]
+	if snapshotID == "" {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	trackedDisk := vars["trackedDiskID"]
+	if trackedDisk == "" {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	volSnap, err := a.mgr.FindVolumeSnapshotForDisk(snapshotID, trackedDisk)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+	a.mgr.Lock()
+	defer a.mgr.Unlock()
+
+	imgPath := volSnap.SnapshotImage.DevicePath
+
+	fp, err := os.Open(imgPath)
+	if err != nil {
+		log.Printf("failed open snapshot file: %q", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	defer fp.Close()
+	http.ServeContent(w, r, imgPath, time.Time{}, fp)
 }
 
 // utils

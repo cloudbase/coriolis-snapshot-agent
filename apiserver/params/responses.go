@@ -1,5 +1,12 @@
 package params
 
+type BackupType string
+
+const (
+	BackupTypeFull        BackupType = "full"
+	BackupTypeIncremental BackupType = "incremental"
+)
+
 var (
 	// NotFoundResponse is returned when a resource is not found
 	NotFoundResponse = APIErrorResponse{
@@ -183,6 +190,7 @@ type SnapshotImage struct {
 }
 
 type TrackedDevice struct {
+	TrackingID string
 	// DevicePath is the snapshot device path in /dev.
 	DevicePath string
 	Major      uint32
@@ -210,4 +218,17 @@ type SnapshotResponse struct {
 	// VolumeSnapshots is an array of all the disk snapshots that
 	// are included in this snapshot.
 	VolumeSnapshots []VolumeSnapshot
+}
+
+type DiskRange struct {
+	StartOffset uint64 `json:"start_offset"`
+	Length      uint64 `json:"length"`
+}
+
+type ChangesResponse struct {
+	TrackedDiskID string      `json:"tracked_disk_id"`
+	SnapshotID    string      `json:"snapshot_id"`
+	CBTBlockSize  int         `json:"cbt_block_size_bytes"`
+	BackupType    BackupType  `json:"backup_type"`
+	Ranges        []DiskRange `json:"sector_ranges"`
 }
