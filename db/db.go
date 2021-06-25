@@ -1,10 +1,10 @@
 package db
 
 import (
+	"log"
 	"regexp"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/timshannon/bolthold"
 	"go.etcd.io/bbolt"
@@ -63,7 +63,7 @@ func (d *Database) GetTrackedDiskByTrackingID(trackingID string) (TrackedDisk, e
 	var trackedDisk TrackedDisk
 
 	if err := d.con.FindOne(&trackedDisk, bolthold.Where("TrackingID").Eq(trackingID)); err != nil {
-		return TrackedDisk{}, errors.Wrap(err, "fetching tracked disk by id")
+		return TrackedDisk{}, errors.Wrapf(err, "fetching tracked disk %s", trackingID)
 	}
 	return trackedDisk, nil
 }
@@ -198,6 +198,14 @@ func (d *Database) GetVolumeSnapshotByID(volumeSnapID string) (VolumeSnapshot, e
 	return snapshots, nil
 }
 
+func (d *Database) ListVolumeSnapshotsBySnapstoreID(snapStoreID string) ([]VolumeSnapshot, error) {
+	var volSnaps []VolumeSnapshot
+	if err := d.con.Find(&volSnaps, bolthold.Where("SnapStore.SnapStoreID").Eq(snapStoreID)); err != nil {
+		return []VolumeSnapshot{}, errors.Wrap(err, "fetching volume snapshots")
+	}
+	return volSnaps, nil
+}
+
 func (d *Database) DeleteVolumeSnapshot(volumeSnapID string) error {
 	if _, err := d.GetVolumeSnapshotByID(volumeSnapID); err != nil {
 		if !errors.Is(err, vErrors.ErrNotFound) {
@@ -218,6 +226,13 @@ func (d *Database) CreateVolumeSnapshot(param VolumeSnapshot) (VolumeSnapshot, e
 		return VolumeSnapshot{}, errors.Wrap(err, "inserting new volume image into db")
 	}
 	return param, nil
+}
+
+func (d *Database) UpdateVolumeSnapshot(param VolumeSnapshot) error {
+	if err := d.con.Update(param.TrackingID, &param); err != nil {
+		return errors.Wrap(err, "updating volume snapshot in db")
+	}
+	return nil
 }
 
 /////////////////////
@@ -334,7 +349,9 @@ func (d *Database) FindSnapStoresForDevice(trackedDiskID string) (SnapStore, err
 func (d *Database) DeleteSnapStore(snapStoreID string) error {
 	param := SnapStore{}
 	if err := d.con.Delete(snapStoreID, &param); err != nil {
-		return errors.Wrap(err, "deleting snap store from db")
+		if !errors.Is(err, bolthold.ErrNotFound) {
+			return errors.Wrap(err, "deleting snap store from db")
+		}
 	}
 	return nil
 }
@@ -355,7 +372,10 @@ func (d *Database) CreateSnapStoreFile(param SnapStoreFile) (SnapStoreFile, erro
 func (d *Database) DeleteSnapStoreFile(fileID string) error {
 	param := SnapStoreFile{}
 	if err := d.con.Delete(fileID, &param); err != nil {
-		return errors.Wrap(err, "deleting snap store file from db")
+		if !errors.Is(err, bolthold.ErrNotFound) {
+			return errors.Wrap(err, "deleting snap store file from db")
+		}
+		log.Printf("snapstore file %s not found", fileID)
 	}
 	return nil
 }
@@ -366,8 +386,13 @@ func (d *Database) GetSnapStoreFile(path string) (SnapStoreFile, error) {
 }
 
 // ListSnapStoreFiles lists all snap store files in a particular snap store files location
-func (d *Database) ListSnapStoreFiles(location SnapStoreFilesLocation) ([]SnapStoreFile, error) {
-	return nil, nil
+func (d *Database) ListSnapStoreFilesForSnapStore(storeID string) ([]SnapStoreFile, error) {
+	var files []SnapStoreFile
+
+	if err := d.con.Find(&files, bolthold.Where("SnapStore.SnapStoreID").Eq(storeID)); err != nil {
+		return []SnapStoreFile{}, errors.Wrap(err, "fetching db entries")
+	}
+	return files, nil
 }
 
 // ListAllSnapStoreFiles lists all snap store files we keep track off, regardless of location.
@@ -377,7 +402,7 @@ func (d *Database) ListAllSnapStoreFiles() ([]SnapStoreFile, error) {
 
 func (d *Database) FindSnapStoreLocationFiles(storeLocationID string) ([]SnapStoreFile, error) {
 	var files []SnapStoreFile
-	if err := d.con.Find(&files, bolthold.Where("SnapStoreFilesLocation.TrackingID").Eq(storeLocationID)); err != nil {
+	if err := d.con.Find(&files, bolthold.Where("SnapStoreFilesLocation.Path").Eq(storeLocationID)); err != nil {
 		return nil, errors.Wrap(err, "fetching location files")
 	}
 	return files, nil
@@ -403,7 +428,7 @@ func (d *Database) GetSnapStoreFilesLocation(path string) (SnapStoreFilesLocatio
 func (d *Database) GetSnapStoreFilesLocationByID(trackingID string) (SnapStoreFilesLocation, error) {
 	var location SnapStoreFilesLocation
 
-	if err := d.con.FindOne(&location, bolthold.Where("TrackingID").Eq(trackingID)); err != nil {
+	if err := d.con.FindOne(&location, bolthold.Where("Path").Eq(trackingID)); err != nil {
 		if errors.Is(err, bolthold.ErrNotFound) {
 			return SnapStoreFilesLocation{}, vErrors.NewNotFoundError("path %s not found in db", trackingID)
 		}
@@ -414,9 +439,9 @@ func (d *Database) GetSnapStoreFilesLocationByID(trackingID string) (SnapStoreFi
 
 // CreateSnapStoreFileLocation creates a new snap store file location
 func (d *Database) CreateSnapStoreFileLocation(snapStore SnapStoreFilesLocation) (SnapStoreFilesLocation, error) {
-	newUUID := uuid.New()
-	snapStore.TrackingID = newUUID.String()
-	if err := d.con.Insert(newUUID.String(), &snapStore); err != nil {
+	// newUUID := uuid.New()
+	// snapStore.TrackingID = newUUID.String()
+	if err := d.con.Insert(snapStore.Path, &snapStore); err != nil {
 		return SnapStoreFilesLocation{}, errors.Wrap(err, "inserting new snap store location into db")
 	}
 	return snapStore, nil
@@ -427,7 +452,7 @@ func (d *Database) ListSnapStoreFilesLocations() ([]SnapStoreFilesLocation, erro
 	var allLocations []SnapStoreFilesLocation
 
 	re := regexp.MustCompile(".*")
-	if err := d.con.Find(&allLocations, bolthold.Where("TrackingID").RegExp(re)); err != nil {
+	if err := d.con.Find(&allLocations, bolthold.Where("Path").RegExp(re)); err != nil {
 		return nil, errors.Wrap(err, "fetching db entries")
 	}
 	return allLocations, nil

@@ -12,9 +12,8 @@ import (
 	"coriolis-veeam-bridge/apiserver/controllers"
 	"coriolis-veeam-bridge/apiserver/routers"
 	"coriolis-veeam-bridge/config"
-	"coriolis-veeam-bridge/manager"
 	"coriolis-veeam-bridge/util"
-	"coriolis-veeam-bridge/worker"
+	"coriolis-veeam-bridge/worker/manager"
 )
 
 var (
@@ -37,22 +36,25 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	log.SetOutput(logWriter)
+
 	ctx, cancel := context.WithCancel(context.Background())
 
-	mgr, err := manager.NewManager(cfg)
+	mgr, err := manager.NewManager(ctx, cfg)
 	if err != nil {
 		log.Fatalf("failed to create manager: %q", err)
 	}
+	if err := mgr.Start(); err != nil {
+		log.Fatalf("failed to create manager: %q", err)
+	}
 
-	snapStorageWorker, err := worker.NewSnapStorageTracker(ctx, mgr)
-	if err != nil {
-		log.Fatalf("failed to create snap storage worker: %+v", err)
-	}
-	if err := snapStorageWorker.Start(); err != nil {
-		log.Fatalf("failed to start snap storage worker: %+v", err)
-	}
+	// snapStorageWorker, err := worker.NewSnapStorageTracker(ctx, mgr)
+	// if err != nil {
+	// 	log.Fatalf("failed to create snap storage worker: %+v", err)
+	// }
+	// if err := snapStorageWorker.Start(); err != nil {
+	// 	log.Fatalf("failed to start snap storage worker: %+v", err)
+	// }
 	controller, err := controllers.NewAPIController(mgr)
 	if err != nil {
 		log.Fatalf("failed to create controller: %+v", err)
@@ -82,5 +84,5 @@ func main() {
 
 	<-stop
 	cancel()
-	snapStorageWorker.Wait()
+	// snapStorageWorker.Wait()
 }

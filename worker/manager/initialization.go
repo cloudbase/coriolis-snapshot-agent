@@ -1,0 +1,129 @@
+package manager
+
+import (
+	"coriolis-veeam-bridge/apiserver/params"
+	vErrors "coriolis-veeam-bridge/errors"
+	"coriolis-veeam-bridge/internal/types"
+	"io/fs"
+	"io/ioutil"
+	"log"
+	"os"
+	"path/filepath"
+
+	"github.com/pkg/errors"
+)
+
+// cleanStorage will remove all files and folders inside the configured
+// CoWDestination array specified in the config.
+func (m *Snapshot) cleanStorage() error {
+	for _, val := range m.cfg.CoWDestination {
+		if _, err := os.Stat(val); err != nil {
+			if !errors.Is(err, fs.ErrNotExist) {
+				return errors.Wrapf(err, "checking CoWDestination %s", val)
+			}
+			if err := os.MkdirAll(val, 00770); err != nil {
+				return errors.Wrapf(err, "creating %s", val)
+			}
+			// We created the folder, there is nothing to clean. Continue.
+			continue
+		}
+		files, err := ioutil.ReadDir(val)
+		if err != nil {
+			return errors.Wrapf(err, "reading %s", val)
+		}
+
+		for _, item := range files {
+			fullPath := filepath.Join(val, item.Name())
+			if err := os.RemoveAll(fullPath); err != nil {
+				return errors.Wrapf(err, "removing %s", fullPath)
+			}
+		}
+	}
+	return nil
+}
+
+func deviceIsTracked(major, minor uint32, cbtInfo []types.CBTInfo) bool {
+	for _, cbt := range cbtInfo {
+		if cbt.DevID.Major == major && cbt.DevID.Minor == minor {
+			if cbt.CBTMapSize > 0 {
+				log.Printf("device %d:%d is already tracked", major, minor)
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (m *Snapshot) initStorageMappings() error {
+	if !m.cfg.AutoInitPhysicalDisks {
+		return nil
+	}
+
+	for _, mapping := range m.cfg.SnapStoreMappings {
+		param := params.CreateSnapStoreMappingRequest{
+			SnapStoreLocation: mapping.Location,
+			TrackedDisk:       mapping.Device,
+		}
+		if _, err := m.CreateSnapStoreMapping(param); err != nil {
+			if !errors.Is(err, &vErrors.ConflictError{}) {
+				return errors.Wrap(err, "init mappings")
+			}
+		}
+	}
+
+	return nil
+}
+
+// initTrackedDisks will add all physical disks that do not take part in
+// hosting snap store files, to tracking.
+func (m *Snapshot) initTrackedDisks() (err error) {
+	if !m.cfg.AutoInitPhysicalDisks {
+		return nil
+	}
+	// listDisks excludes disks configured as snap store destinations.
+	disks, err := m.listDisks(false)
+	if err != nil {
+		return errors.Wrap(err, "fetching disks list")
+	}
+
+	for _, val := range disks {
+		log.Printf("checking disk %s\n", val.Path)
+		newDevParams := params.AddTrackedDiskRequest{
+			DevicePath: val.Path,
+		}
+
+		_, err = m.AddTrackedDisk(newDevParams)
+		if err != nil {
+			return errors.Wrapf(err, "adding disk %s to tracking", val.Path)
+		}
+	}
+	if err := m.initStorageMappings(); err != nil {
+		return errors.Wrap(err, "adding storage mappings")
+	}
+	return nil
+}
+
+// addSnapStoreFilesLocations adds all configured CoWDestination members
+// to the database.
+func (m *Snapshot) addSnapStoreFilesLocations() error {
+	for _, val := range m.cfg.CoWDestination {
+		if _, err := m.AddSnapStoreLocation(val); err != nil {
+			if !errors.Is(err, &vErrors.ConflictError{}) {
+				return errors.Wrap(err, "creating snap store location")
+			}
+		}
+	}
+	return nil
+}
+
+func (m *Snapshot) PopulateSnapStoreWatcher() error {
+	stores, err := m.db.ListSnapStores()
+	if err != nil {
+		return errors.Wrap(err, "initializing snap storage worker")
+	}
+
+	for _, store := range stores {
+		m.SendNotify(SnapStoreEvent, store)
+	}
+	return nil
+}

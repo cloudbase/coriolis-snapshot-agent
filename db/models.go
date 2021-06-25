@@ -2,6 +2,13 @@ package db
 
 import "path/filepath"
 
+type VolumeStatus string
+
+var (
+	VolumeStatusHealthy  VolumeStatus = "healthy"
+	VolumeStatusOverflow VolumeStatus = "overflow"
+)
+
 type TrackedDisk struct {
 	TrackingID string
 	Path       string
@@ -38,7 +45,6 @@ type SnapStoreMapping struct {
 
 // SnapStoreFilesLocation holds
 type SnapStoreFilesLocation struct {
-	TrackingID string
 	// Path is the filesystem path where the snap store files will be
 	// created. This must coincide with items in the CoWDestination
 	// config value. This folder must be cleared of all pre-allocated
@@ -124,6 +130,8 @@ type VolumeSnapshot struct {
 	Bitmap     []byte
 	SnapshotID string
 	SnapStore  SnapStore
+	// Status shows the status of the snapshot (ie: healthy, overflow)
+	Status VolumeStatus
 }
 
 type Snapshot struct {

@@ -32,9 +32,9 @@ const (
 	// DefaultListenPort is the default HTTPS listen port
 	DefaultListenPort = 8899
 
-	// minimum amount of free space in a snap store (2 GB). Any less than this, and we add another
-	// 2 GB of space.
-	MinimumSpaceForStore uint64 = 2 * 1024 * 1024 * 1024
+	// DefaultSnapStoreFileSize is the default allocation size for new chunks that get
+	// added to a snap store.
+	DefaultSnapStoreFileSize uint64 = 2 * 1024 * 1024 * 1024 // 2GB
 )
 
 // ParseConfig parses the file passed in as cfgFile and returns
@@ -72,23 +72,44 @@ func ParseConfig(cfgFile string) (*Config, error) {
 		config.DBFile = DefaultDBFile
 	}
 
+	if config.SnapStoreFileSize == 0 {
+		config.SnapStoreFileSize = DefaultSnapStoreFileSize
+	}
+
 	if err := config.Validate(); err != nil {
 		return nil, errors.Wrap(err, "validating config")
 	}
 	return &config, nil
 }
 
+type SnapStoreMapping struct {
+	Device   string `toml:"device"`
+	Location string `toml:"location"`
+}
+
+func (s *SnapStoreMapping) Validate() error {
+	if s.Device == "" || s.Location == "" {
+		return vErrors.NewValueError("invalid device or location in mapping")
+	}
+
+	if _, err := os.Stat(s.Location); err != nil {
+		return errors.Wrapf(err, "location %s does not exist", s.Location)
+	}
+
+	if _, err := os.Stat(filepath.Join("/dev", s.Device)); err != nil {
+		return vErrors.NewValueError("invalid device %s in mapping", s.Device)
+	}
+	return nil
+}
+
 // Config is the coriolis-veeam-bridge config
 type Config struct {
 	// DBFile is the path on disk to the database location
 	DBFile string `toml:"db_file"`
-
 	// APIServer is the api server configuration.
 	APIServer APIServer `toml:"api"`
-
 	// LogFile is the location of the log file
 	LogFile string `toml:"log_file"`
-
 	// CoWDestination is the path to a folder where snap storage
 	// extents will be pre-allocated via files. This folder must
 	// live on a separate disk, which will be excluded from being
@@ -99,12 +120,15 @@ type Config struct {
 	//
 	// In future versions, you will be able to host these folders
 	// on disks that do take part of the snapshotting process.
-	CoWDestination []string `toml:"cow_destination"`
-
+	CoWDestination []string `toml:"snapstore_destinations"`
 	// AutoInitPhysicalDisks if set tot true, will add all physical
 	// disks to tracking when service starts. Device mappers will be
 	// skipped, as well as any virtual devices (loop, ram, etc).
 	AutoInitPhysicalDisks bool `toml:"auto_init_physical_disks"`
+	// SnapStoreMappings is a pre-configured list of device to snapstore
+	// mappings.
+	SnapStoreMappings []SnapStoreMapping `toml:"snapstore_mapping"`
+	SnapStoreFileSize uint64             `toml:"snap_store_file_size"`
 
 	cowDestinationDevicePaths []string
 }
@@ -135,6 +159,19 @@ func (c *Config) Validate() error {
 
 	if err := c.APIServer.Validate(); err != nil {
 		return errors.Wrap(err, "validating api server section")
+	}
+
+	for _, mapping := range c.SnapStoreMappings {
+		found := false
+		for _, location := range c.CoWDestination {
+			if location == mapping.Location {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return vErrors.NewValueError("mapping %s points to invalid cow destination", mapping.Location)
+		}
 	}
 
 	return nil

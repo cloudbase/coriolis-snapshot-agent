@@ -132,7 +132,7 @@ type BlockVolume struct {
 }
 
 type SnapStoreLocation struct {
-	ID string `json:"id"`
+	// ID string `json:"id"`
 	// AvailableCapacity is the amount of free disk space
 	// on a device. This value can be different from
 	// TotalCapacity - AllocatedCapacity, as there is no guarantee
@@ -163,7 +163,7 @@ type SnapStoreLocation struct {
 type SnapStoreResponse struct {
 	ID                 string `json:"id"`
 	TrackedDiskID      string `json:"tracked_disk_id"`
-	StorageLocationID  string `json:"storage_location_id"`
+	StorageLocationID  string `json:"storage_location"`
 	AllocatedDiskSpace uint64 `json:"allocated_disk_space"`
 	StorageUsage       uint64 `json:"used_disk_space"`
 }
@@ -171,7 +171,7 @@ type SnapStoreResponse struct {
 type SnapStoreMappingResponse struct {
 	ID                string `json:"id"`
 	TrackedDiskID     string `json:"tracked_disk_id"`
-	StorageLocationID string `json:"storage_location_id"`
+	StorageLocationID string `json:"storage_location"`
 }
 
 // type Volume struct {
@@ -230,5 +230,5 @@ type ChangesResponse struct {
 	SnapshotID    string      `json:"snapshot_id"`
 	CBTBlockSize  int         `json:"cbt_block_size_bytes"`
 	BackupType    BackupType  `json:"backup_type"`
-	Ranges        []DiskRange `json:"sector_ranges"`
+	Ranges        []DiskRange `json:"ranges"`
 }

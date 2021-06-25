@@ -488,3 +488,20 @@ func FindDeviceByID(major uint32, minor uint32) (string, error) {
 	return "", vErrors.NewNotFoundError(
 		fmt.Sprintf("could not find device [%d:%d]", major, minor))
 }
+
+// FindBlockVolumeByID returns a BlockVolume{} that identifies the device with
+// major:minor.
+func FindBlockVolumeByID(major uint32, minor uint32) (BlockVolume, error) {
+	devices, err := BlockDeviceList(false)
+	if err != nil {
+		return BlockVolume{}, errors.Wrap(err, "fetching devices")
+	}
+
+	for _, val := range devices {
+		if val.Major == major && val.Minor == minor {
+			return val, nil
+		}
+	}
+	return BlockVolume{}, vErrors.NewNotFoundError(
+		fmt.Sprintf("could not find device [%d:%d]", major, minor))
+}

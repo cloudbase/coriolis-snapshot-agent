@@ -13,7 +13,7 @@ import (
 
 	"coriolis-veeam-bridge/apiserver/params"
 	vErrors "coriolis-veeam-bridge/errors"
-	"coriolis-veeam-bridge/manager"
+	"coriolis-veeam-bridge/worker/manager"
 )
 
 // NewAPIController returns a new instance of APIController
@@ -106,6 +106,19 @@ func (a *APIController) ListSnapshotsHandler(w http.ResponseWriter, r *http.Requ
 }
 
 func (a *APIController) GetSnapshotHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	snapshotID, ok := vars["snapshotID"]
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	snap, err := a.mgr.GetSnapshot(snapshotID)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+	json.NewEncoder(w).Encode(snap)
 }
 
 func (a *APIController) DeleteSnapshotHandler(w http.ResponseWriter, r *http.Request) {
@@ -115,7 +128,7 @@ func (a *APIController) DeleteSnapshotHandler(w http.ResponseWriter, r *http.Req
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	if err := a.mgr.DeleteSnaphot(snapshotID); err != nil {
+	if err := a.mgr.DeleteSnapshot(snapshotID); err != nil {
 		log.Printf("failed to get disk: %+v", err)
 		handleError(w, err)
 		return

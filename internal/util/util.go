@@ -32,6 +32,9 @@ type FileSystemInfo struct {
 	// BlocksAvailable is the total number of free blocks
 	// available to unprivileged user
 	BlocksAvailable uint64
+
+	// BytesFree is the free amount of disk space in bytes.
+	BytesFree uint64
 }
 
 // FindAllInvolvedDevices accepts an array of device ids, and determins whether or
@@ -133,6 +136,7 @@ func GetFileSystemInfoFromPath(path string) (FileSystemInfo, error) {
 		Blocks:          stat.Blocks,
 		BlocksFree:      stat.Bfree,
 		BlocksAvailable: stat.Bavail,
+		BytesFree:       uint64(stat.Bsize * int64(stat.Bfree)),
 	}, nil
 }
 

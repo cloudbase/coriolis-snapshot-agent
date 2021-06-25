@@ -234,3 +234,24 @@ func (b *ValueError) Is(target error) bool {
 	_, ok := target.(*ValueError)
 	return ok
 }
+
+// NewSnapStoreOverflowError returns a new ErrSnapStoreOverflow
+func NewSnapStoreOverflowError(msg string, a ...interface{}) error {
+	return &ErrSnapStoreOverflow{
+		baseError{
+			msg: fmt.Sprintf(msg, a...),
+		},
+	}
+}
+
+type ErrSnapStoreOverflow struct {
+	baseError
+}
+
+func (b *ErrSnapStoreOverflow) Is(target error) bool {
+	if target == nil {
+		return false
+	}
+	_, ok := target.(*ValueError)
+	return ok
+}
