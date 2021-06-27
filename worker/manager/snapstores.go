@@ -152,18 +152,18 @@ func (m *Snapshot) CreateSnapStore(trackedDisk string) (db.SnapStore, error) {
 		}(true)
 	}
 
-	snapWatcherParams := common.CreateSnapStoreParams{
+	snapCharacterDeviceWatcherParams := common.CreateSnapStoreParams{
 		ID:                uuidAsBytes,
 		BaseDir:           store.Path(),
 		SnapDeviceID:      snapDisk,
 		DeviceID:          deviceID,
 		SnapStoreFileSize: m.cfg.SnapStoreFileSize,
 	}
-	snapWatcher, err := snapstore.NewSnapStoreWatcher(snapWatcherParams, m.msgChan)
+	snapCharacterDeviceWatcher, err := snapstore.NewSnapStoreCharacterDeviceWatcher(snapCharacterDeviceWatcherParams, m.msgChan)
 	if err != nil {
 		return db.SnapStore{}, errors.Wrap(err, "creating snap store")
 	}
-	m.RecordWatcher(newUUID.String(), snapWatcher)
+	m.RecordWatcher(newUUID.String(), snapCharacterDeviceWatcher)
 	return store, nil
 }
 

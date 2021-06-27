@@ -4,12 +4,15 @@ import (
 	"coriolis-veeam-bridge/apiserver/params"
 	vErrors "coriolis-veeam-bridge/errors"
 	"coriolis-veeam-bridge/internal/types"
+	"coriolis-veeam-bridge/worker/common"
+	"coriolis-veeam-bridge/worker/snapstore"
 	"io/fs"
 	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
 
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 )
 
@@ -123,7 +126,31 @@ func (m *Snapshot) PopulateSnapStoreWatcher() error {
 	}
 
 	for _, store := range stores {
-		m.SendNotify(SnapStoreEvent, store)
+		storeID, err := uuid.Parse(store.SnapStoreID)
+		if err != nil {
+			return errors.Wrap(err, "parsing uuid")
+		}
+		deviceID := types.DevID{
+			Major: store.TrackedDisk.Major,
+			Minor: store.TrackedDisk.Minor,
+		}
+
+		snapDisk := types.DevID{
+			Major: store.StorageLocation.Major,
+			Minor: store.StorageLocation.Minor,
+		}
+		snapCharacterDeviceWatcherParams := common.CreateSnapStoreParams{
+			ID:                [16]byte(storeID),
+			BaseDir:           store.Path(),
+			SnapDeviceID:      snapDisk,
+			DeviceID:          deviceID,
+			SnapStoreFileSize: m.cfg.SnapStoreFileSize,
+		}
+		snapCharacterDeviceWatcher, err := snapstore.NewSnapStoreCharacterDeviceWatcher(snapCharacterDeviceWatcherParams, m.msgChan)
+		if err != nil {
+			return errors.Wrap(err, "creating snap store")
+		}
+		m.RecordWatcher(store.SnapStoreID, snapCharacterDeviceWatcher)
 	}
 	return nil
 }

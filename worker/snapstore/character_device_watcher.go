@@ -18,49 +18,13 @@ import (
 	"coriolis-veeam-bridge/worker/common"
 )
 
-// REMOVE. Instantiate the watcher struct from the wather manager.
-// func NewSnapStoreWatcher(deviceID, snapDevice types.DevID, basedir string, errChan chan error) (*Watcher, error) {
-// 	newID := uuid.New()
-// 	charDev, err := os.OpenFile(ioctl.VEEAM_DEV, os.O_RDWR, 0600)
-// 	if err != nil {
-// 		return nil, errors.Wrapf(err, "opening char device %s", ioctl.VEEAM_DEV)
-// 	}
-
-// 	w := &Watcher{
-// 		ID:           newID,
-// 		devID:        deviceID,
-// 		snapDeviceID: snapDevice,
-// 		basedir:      basedir,
-
-// 		charDevice: charDev,
-
-// 		charDeviceReaderQuit: make(chan struct{}),
-// 		errChan:              errChan,
-// 	}
-// 	go w.charDeviceReader()
-
-// 	if err := w.create(); err != nil {
-// 		// stop the reader and return the error.
-// 		charDev.Close()
-// 		return nil, errors.Wrap(err, "creating snap store")
-// 	}
-
-// 	if err := w.allocateInitialStorage(); err != nil {
-// 		// stop the reader and return the error.
-// 		w.cleanupSnapStore()
-// 		defer charDev.Close()
-// 		return nil, errors.Wrap(err, "creating snap store")
-// 	}
-// 	return w, nil
-// }
-
-func NewSnapStoreWatcher(param common.CreateSnapStoreParams, watcherChan chan interface{}) (*Watcher, error) {
+func NewSnapStoreCharacterDeviceWatcher(param common.CreateSnapStoreParams, watcherChan chan interface{}) (*CharacterDeviceWatcher, error) {
 	charDev, err := os.OpenFile(ioctl.VEEAM_DEV, os.O_RDWR, 0600)
 	if err != nil {
 		return nil, errors.Wrapf(err, "opening char device %s", ioctl.VEEAM_DEV)
 	}
 	asUUID := uuid.UUID(param.ID)
-	watcher := &Watcher{
+	watcher := &CharacterDeviceWatcher{
 		ID:                   asUUID,
 		snapStoreFileSize:    param.SnapStoreFileSize,
 		devID:                param.DeviceID,
@@ -77,7 +41,7 @@ func NewSnapStoreWatcher(param common.CreateSnapStoreParams, watcherChan chan in
 	return watcher, nil
 }
 
-type Watcher struct {
+type CharacterDeviceWatcher struct {
 	ID                uuid.UUID
 	snapStoreFileSize uint64
 	devID             types.DevID
@@ -96,7 +60,7 @@ type Watcher struct {
 	messageChan          chan interface{}
 }
 
-func (w *Watcher) Start() error {
+func (w *CharacterDeviceWatcher) Start() error {
 	if err := w.create(); err != nil {
 		return errors.Wrapf(err, "creating snap store %s", w.ID.String())
 	}
@@ -105,7 +69,7 @@ func (w *Watcher) Start() error {
 	return nil
 }
 
-func (w *Watcher) removeSnapStoreFiles() error {
+func (w *CharacterDeviceWatcher) removeSnapStoreFiles() error {
 	log.Printf("removing basedir: %s", w.basedir)
 	if err := os.RemoveAll(w.basedir); err != nil {
 		if !errors.Is(err, fs.ErrNotExist) {
@@ -119,7 +83,7 @@ func (w *Watcher) removeSnapStoreFiles() error {
 	return nil
 }
 
-func (w *Watcher) GetTrackedDeviceSize() (uint64, error) {
+func (w *CharacterDeviceWatcher) GetTrackedDeviceSize() (uint64, error) {
 	dev, err := storage.FindBlockVolumeByID(w.devID.Major, w.devID.Minor)
 	if err != nil {
 		return 0, errors.Wrap(err, "fetching device")
@@ -127,7 +91,7 @@ func (w *Watcher) GetTrackedDeviceSize() (uint64, error) {
 	return uint64(dev.Size), nil
 }
 
-func (w *Watcher) create() error {
+func (w *CharacterDeviceWatcher) create() error {
 	log.Printf("empty limit for device %d:%d is %d bytes", w.devID.Major, w.devID.Minor, w.snapStoreFileSize)
 	snapStoreParams := SnapStoreStretchInitiateParams{
 		ID:                [16]byte(w.ID),
@@ -152,7 +116,7 @@ func (w *Watcher) create() error {
 	return nil
 }
 
-func (w *Watcher) AllocateInitialStorage() (string, uint64, error) {
+func (w *CharacterDeviceWatcher) AllocateInitialStorage() (string, uint64, error) {
 	deviceSize, err := w.GetTrackedDeviceSize()
 	if err != nil {
 		return "", 0, errors.Wrap(err, "fetching device size")
@@ -163,7 +127,7 @@ func (w *Watcher) AllocateInitialStorage() (string, uint64, error) {
 	return w.AllocateStorage(toAllocate)
 }
 
-func (w *Watcher) AllocateStorage(size uint64) (string, uint64, error) {
+func (w *CharacterDeviceWatcher) AllocateStorage(size uint64) (string, uint64, error) {
 
 	if _, err := os.Stat(w.basedir); err != nil {
 		if !errors.Is(err, fs.ErrExist) {
@@ -226,7 +190,7 @@ func (w *Watcher) AllocateStorage(size uint64) (string, uint64, error) {
 	return filePath, uint64(info.Size()), nil
 }
 
-func (w *Watcher) charDeviceReader() {
+func (w *CharacterDeviceWatcher) charDeviceReader() {
 	defer close(w.charDeviceReaderQuit)
 
 	for {
@@ -314,7 +278,7 @@ func (w *Watcher) charDeviceReader() {
 	}
 }
 
-func (w *Watcher) halfFillHandler(msg []byte) error {
+func (w *CharacterDeviceWatcher) halfFillHandler(msg []byte) error {
 	log.Printf("Got halffill notification from kernel module for snapstore %s", w.ID.String())
 	// the amount of filled bytes is an uint64
 	// split up in 2, 32 bit ranges.
@@ -338,7 +302,7 @@ func (w *Watcher) halfFillHandler(msg []byte) error {
 	return nil
 }
 
-func (w *Watcher) overflowHandler(msg []byte) error {
+func (w *CharacterDeviceWatcher) overflowHandler(msg []byte) error {
 	errorCode := binary.LittleEndian.Uint32(msg[:4])
 	// the amount of filled bytes is an uint64
 	// split up in 2, 32 bit values. We need to combine them

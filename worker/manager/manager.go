@@ -51,12 +51,12 @@ func NewManager(ctx context.Context, cfg *config.Config) (manager *Snapshot, err
 	}
 
 	snapshotMaganer := &Snapshot{
-		cfg:               cfg,
-		ctx:               ctx,
-		db:                database,
-		notifyChannels:    map[NotificationType][]chan interface{}{},
-		snapStoreWatchers: map[string]*snapstore.Watcher{},
-		msgChan:           make(chan interface{}, 50),
+		cfg:                              cfg,
+		ctx:                              ctx,
+		db:                               database,
+		notifyChannels:                   map[NotificationType][]chan interface{}{},
+		snapStoreCharacterDeviceWatchers: map[string]*snapstore.CharacterDeviceWatcher{},
+		msgChan:                          make(chan interface{}, 50),
 	}
 	if dbNeedsInit {
 		defer func() {
@@ -82,6 +82,10 @@ func NewManager(ctx context.Context, cfg *config.Config) (manager *Snapshot, err
 	if err != nil {
 		return nil, errors.Wrap(err, "auto adding physical disks to tracking")
 	}
+
+	if err := snapshotMaganer.PopulateSnapStoreWatcher(); err != nil {
+		return nil, errors.Wrap(err, "populating watchers")
+	}
 	return snapshotMaganer, nil
 }
 
@@ -91,7 +95,7 @@ type Snapshot struct {
 	notifyChannels map[NotificationType][]chan interface{}
 
 	// snapStores is a list of snap stores we currently track
-	snapStoreWatchers map[string]*snapstore.Watcher
+	snapStoreCharacterDeviceWatchers map[string]*snapstore.CharacterDeviceWatcher
 	// communication channel with snapstore watchers. Messages indicating that
 	// a new chunk of data has been added to a snap store, or an overflow
 	// event, will be sent back through this channel.
@@ -104,25 +108,25 @@ type Snapshot struct {
 	regMux sync.Mutex
 }
 
-func (m *Snapshot) RecordWatcher(snapstoreID string, watcher *snapstore.Watcher) {
+func (m *Snapshot) RecordWatcher(snapstoreID string, watcher *snapstore.CharacterDeviceWatcher) {
 	m.regMux.Lock()
 	defer m.regMux.Unlock()
 
-	m.snapStoreWatchers[snapstoreID] = watcher
+	m.snapStoreCharacterDeviceWatchers[snapstoreID] = watcher
 }
 
-func (m *Snapshot) RemoveWatcher(snapstoreID string) {
+func (m *Snapshot) RemoveCharacterDeviceWatcher(snapstoreID string) {
 	m.regMux.Lock()
 	defer m.regMux.Unlock()
 
-	delete(m.snapStoreWatchers, snapstoreID)
+	delete(m.snapStoreCharacterDeviceWatchers, snapstoreID)
 }
 
-func (m *Snapshot) GetWatcher(snapstoreID string) (*snapstore.Watcher, error) {
+func (m *Snapshot) GetCharacterDeviceWatcher(snapstoreID string) (*snapstore.CharacterDeviceWatcher, error) {
 	m.regMux.Lock()
 	defer m.regMux.Unlock()
 
-	w, ok := m.snapStoreWatchers[snapstoreID]
+	w, ok := m.snapStoreCharacterDeviceWatchers[snapstoreID]
 	if !ok {
 		return nil, vErrors.NewNotFoundError("snap store watcher for %s not found", snapstoreID)
 	}
@@ -410,7 +414,7 @@ func (m *Snapshot) ensureSnapStoreForDisk(diskID string) (db.SnapStore, error) {
 		return db.SnapStore{}, errors.Wrap(err, "creating snap store")
 	}
 
-	watcher, err := m.GetWatcher(newStore.SnapStoreID)
+	watcher, err := m.GetCharacterDeviceWatcher(newStore.SnapStoreID)
 	if err != nil {
 		return db.SnapStore{}, errors.Wrap(err, "fetching snapstore watcher")
 	}
