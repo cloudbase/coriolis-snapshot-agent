@@ -1,0 +1,9 @@
+# Upstart file for Coriolis snapshot agent
+
+respawn
+respawn limit 15 5
+
+start on runlevel [2345]
+stop on runlevel [06]
+
+exec /usr/local/bin/coriolis-snapshot-agent -config /etc/coriolis-snapshot-agent/config.toml

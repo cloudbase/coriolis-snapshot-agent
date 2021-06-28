@@ -151,3 +151,10 @@ The agent uses a [bbolt](https://github.com/etcd-io/bbolt), key-value part datab
 
 ## Instalation
 
+Build the binary. You will need to have docker installed:
+
+```bash
+make
+```
+
+After the command returns, you'll have a statically built binary in your current folder.
