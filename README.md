@@ -266,6 +266,9 @@ log_file = "/tmp/coriolis-snapshot-agent.log"
 # that make up that device mapper, will be excluded. Paths set here, should
 # be on a separate block volume (physical, iSCSI, rbd, etc). 
 snapstore_destinations = ["/mnt/snapstores/snapstore_files"]
+
+# auto_init_physical_disks, if true will automatically add all physical
+# disks that are not set as a snap store destination, under tracking.
 auto_init_physical_disks = true
 
 # Snapstore mappings are a quick way to pre-configure snap store mappings.
@@ -282,6 +285,17 @@ device = "vda"
 # option above.
 location = "/mnt/snapstores/snapstore_files"
 
+# Snap store file size is the size in bytes of the chunks of disk space that will
+# be added to a snap store in the event that a snap store reaches their
+# "empty limit". The empty limit is a threshold set on every created snap store
+# that is equal to the size of this setting, where the agent gets notified that
+# it needs to add more disk space. The disk space it adds is in increments of
+# bytes, dictated by this option. The default value is 2 GB.
+# So for example, if you set this option to 2 GB, if the disk space available
+# to a snap store drops bellow 2 GB, an event is triggered that prompts the agent
+# to add another 2 GB chunk of space to a snap store.
+snap_store_file_size = 2147483648
+
 [[snapstore_mapping]]
 device = "vdc"
 location = "/mnt/snapstores/snapstore_files" 
@@ -297,8 +311,508 @@ port = 9999
 	certificate = "/etc/coriolis-snapshot-agent/ssl/srv-pub.pem"
 	key = "/etc/coriolis-snapshot-agent/ssl/srv-key.pem"
 	ca_certificate = "/etc/coriolis-snapshot-agent/ssl/ca-pub.pem"
-
 ```
 
 ## Agent API
 
+### List disks
+
+```
+GET /api/v1/disks/
+```
+
+| Name | Type | Optional | Description |
+| ---- | ---- | -------- | ----------- |
+| includeVirtual | bool | true | When true, the API will return all block devices on the system, except the ones used for snap stores |
+
+Example usage:
+
+
+```bash
+curl -s -X GET \
+  --cert /etc/coriolis-snapshot-agent/ssl/client-pub.pem \
+  --key /etc/coriolis-snapshot-agent/ssl/client-key.pem \
+  --cacert /etc/coriolis-snapshot-agent/ssl/ca-pub.pem \
+  https://192.168.122.87:9999/api/v1/disks/|jq
+[
+  {
+    "id": "vda",
+    "path": "/dev/vda",
+    "partition_table_type": "gpt",
+    "partition_table_uuid": "8df09209-6e27-4f0c-a155-ad327bb8f89b",
+    "name": "vda",
+    "size": 26843545600,
+    "logical_sector_size": 512,
+    "physical_sector_size": 512,
+    "partitions": [
+      {
+        "name": "vda1",
+        "path": "/dev/vda1",
+        "sectors": 2048,
+        "partition_uuid": "52296511-3cf6-497c-a96c-2c4b5dd6e540",
+        "partition_type": "21686148-6449-6e6f-744e-656564454649",
+        "start_sector": 2048,
+        "end_sector": 4095,
+        "alignment_offset": 0,
+        "device_major": 252,
+        "device_minor": 1
+      },
+      {
+        "name": "vda2",
+        "path": "/dev/vda2",
+        "sectors": 2097152,
+        "filesystem_uuid": "0f77716b-36b3-4fec-bc41-6855b9e6fbd3",
+        "partition_uuid": "b662da27-fe4d-41a3-99d4-d9173349378d",
+        "partition_type": "0fc63daf-8483-4772-8e79-3d69d8477de4",
+        "filesystem_type": "ext4",
+        "start_sector": 4096,
+        "end_sector": 2101247,
+        "alignment_offset": 0,
+        "device_major": 252,
+        "device_minor": 2
+      },
+      {
+        "name": "vda3",
+        "path": "/dev/vda3",
+        "sectors": 50325504,
+        "filesystem_uuid": "zKQWwb-zJei-IhET-NX3W-lfNC-lF7U-q5Da5D",
+        "partition_uuid": "fad5320e-cf4d-4117-96a9-4b219c9f9065",
+        "partition_type": "0fc63daf-8483-4772-8e79-3d69d8477de4",
+        "filesystem_type": "LVM2_member",
+        "start_sector": 2101248,
+        "end_sector": 52426751,
+        "alignment_offset": 0,
+        "device_major": 252,
+        "device_minor": 3
+      }
+    ],
+    "filesystem_type": "",
+    "alignment_offset": 0,
+    "device_major": 252,
+    "is_virtual": false
+  },
+  {
+    "id": "vdc",
+    "path": "/dev/vdc",
+    "partition_table_type": "dos",
+    "partition_table_uuid": "73ac85a2",
+    "name": "vdc",
+    "size": 21474836480,
+    "logical_sector_size": 512,
+    "physical_sector_size": 512,
+    "partitions": [
+      {
+        "name": "vdc1",
+        "path": "/dev/vdc1",
+        "sectors": 41940992,
+        "filesystem_uuid": "2bc1143a-f7df-4dd3-b39e-6113b4f4c479",
+        "partition_uuid": "73ac85a2-01",
+        "partition_type": "0x83",
+        "filesystem_type": "ext4",
+        "start_sector": 2048,
+        "end_sector": 41943039,
+        "alignment_offset": 0,
+        "device_major": 252,
+        "device_minor": 33
+      }
+    ],
+    "filesystem_type": "",
+    "alignment_offset": 0,
+    "device_major": 252,
+    "device_minor": 32,
+    "is_virtual": false
+  }
+]
+```
+
+### Get single disk
+
+```bash
+GET /api/v1/disks/{diskTrackingID}/
+```
+
+Example usage:
+
+```bash
+curl -s -X GET \
+  --cert /etc/coriolis-snapshot-agent/ssl/client-pub.pem \
+  --key /etc/coriolis-snapshot-agent/ssl/client-key.pem \
+  --cacert /etc/coriolis-snapshot-agent/ssl/ca-pub.pem \
+  https://192.168.122.87:9999/api/v1/disks/vdc/|jq
+{
+  "id": "vdc",
+  "path": "/dev/vdc",
+  "partition_table_type": "dos",
+  "partition_table_uuid": "73ac85a2",
+  "name": "vdc",
+  "size": 21474836480,
+  "logical_sector_size": 512,
+  "physical_sector_size": 512,
+  "partitions": [
+    {
+      "name": "vdc1",
+      "path": "/dev/vdc1",
+      "sectors": 41940992,
+      "filesystem_uuid": "2bc1143a-f7df-4dd3-b39e-6113b4f4c479",
+      "partition_uuid": "73ac85a2-01",
+      "partition_type": "0x83",
+      "filesystem_type": "ext4",
+      "start_sector": 2048,
+      "end_sector": 41943039,
+      "alignment_offset": 0,
+      "device_major": 252,
+      "device_minor": 33
+    }
+  ],
+  "filesystem_type": "",
+  "alignment_offset": 0,
+  "device_major": 252,
+  "device_minor": 32,
+  "is_virtual": false
+}
+```
+
+### View snap store locations
+
+The response from this call should mirror the values set in your config under the ```snapstore_destinations``` option.
+
+```bash
+GET /api/v1/snapstorelocations/
+```
+
+Example usage:
+
+```bash
+curl -s -X GET \
+  --cert /etc/coriolis-snapshot-agent/ssl/client-pub.pem \
+  --key /etc/coriolis-snapshot-agent/ssl/client-key.pem \
+  --cacert /etc/coriolis-snapshot-agent/ssl/ca-pub.pem \
+  https://192.168.122.87:9999/api/v1/snapstorelocations/|jq
+[
+  {
+    "available_capacity": 39791616000,
+    "allocated_capacity": 0,
+    "total_capacity": 42006183936,
+    "path": "/mnt/snapstores/snapstore_files",
+    "device_path": "/dev/vdb1",
+    "major": 252,
+    "minor": 17
+  }
+]
+```
+
+The unique identifier is the ```path``` field.
+
+
+### View snap store mappings
+
+If you configured ```snapstore_mapping``` sections in your config file, this should already be populated.
+
+```bash
+GET /api/v1/snapstoremappings/
+```
+
+Example usage:
+
+```bash
+curl -s -X GET \
+  --cert /etc/coriolis-snapshot-agent/ssl/client-pub.pem \
+  --key /etc/coriolis-snapshot-agent/ssl/client-key.pem \
+  --cacert /etc/coriolis-snapshot-agent/ssl/ca-pub.pem \
+  https://192.168.122.87:9999/api/v1/snapstoremappings/|jq
+[
+  {
+    "id": "4df3cb1d-aded-4a08-8a01-aa1464bd6a65",
+    "tracked_disk_id": "vda",
+    "storage_location": "/mnt/snapstores/snapstore_files"
+  },
+  {
+    "id": "eedef3c4-b716-410c-803f-4484a34e9290",
+    "tracked_disk_id": "vdc",
+    "storage_location": "/mnt/snapstores/snapstore_files"
+  }
+]
+```
+
+### Create a snap store mapping
+
+If you have not configured any snap store mappings in your config, you can still add them via the API.
+
+```bash
+POST /api/v1/snapstoremappings/
+```
+
+Example usage:
+
+```bash
+curl -0 -X POST https://192.168.122.87:9999/api/v1/snapstoremappings/ \
+  --cert /etc/coriolis-snapshot-agent/ssl/client-pub.pem \
+  --key /etc/coriolis-snapshot-agent/ssl/client-key.pem \
+  --cacert /etc/coriolis-snapshot-agent/ssl/ca-pub.pem \
+	-H "Content-type: application-json" \
+	--data-binary @- << EOF
+	{
+		"snapstore_location_id": "/mnt/snapstores/snapstore_files",
+		"tracked_disk_id": "vdc"
+	}
+EOF
+```
+
+### Create snapshot
+
+Now that we have our snap store mappings set up, we can create a snapshot.
+
+```bash
+POST /api/v1/snapshots/
+```
+
+Example usage:
+
+```bash
+curl -s -X POST https://192.168.122.87:9999/api/v1/snapshots/ \
+  --cert /etc/coriolis-snapshot-agent/ssl/client-pub.pem \
+  --key /etc/coriolis-snapshot-agent/ssl/client-key.pem \
+  --cacert /etc/coriolis-snapshot-agent/ssl/ca-pub.pem \
+	-H "Content-type: application-json" \
+	--data-binary @- << EOF
+	{
+		"tracked_disk_ids": ["vda", "vdc"]
+	}
+EOF
+```
+
+This will create a **single** snapshot, encompasing **two** disks. Each disk will have its own snapshot volume, but both snapshot volumes will be identified by the same snapshot ID. Naturally, you can create snapshots of each individual disks if you so wish.
+
+The operations that take place when creating a snapshot are as follows:
+
+  * For each disk in the array, a new snap store is created in the location indicated by the snap store mapping.
+  * The snapstore will get an initial disk space allocation of 20% of the size of the disk that is being snapshot.
+  * A new snap store watcher is spawned internally, that will monitor the status of disk usage during the backup operation.
+  * A snapshot is created and the details describing that snapshot are returned as part of the response.
+
+  ### List snapshots
+
+  ```bash
+  GET /api/v1/snapshots/
+  ```
+
+Example usage:
+
+```bash
+curl -s -X GET --cert /etc/coriolis-snapshot-agent/ssl/client-pub.pem \
+  --key /etc/coriolis-snapshot-agent/ssl/client-key.pem \
+  --cacert /etc/coriolis-snapshot-agent/ssl/ca-pub.pem \
+  https://192.168.122.87:9999/api/v1/snapshots/|jq
+[
+  {
+    "SnapshotID": "18446633009895023040",
+    "VolumeSnapshots": [
+      {
+        "SnapshotNumber": 3,
+        "GenerationID": "80564045-085a-4b1c-82d4-7410bce63d4a",
+        "OriginalDevice": {
+          "TrackingID": "vda",
+          "DevicePath": "/dev/vda",
+          "Major": 252,
+          "Minor": 0
+        },
+        "SnapshotImage": {
+          "DevicePath": "/dev/veeamimage0",
+          "Major": 251,
+          "Minor": 0
+        }
+      },
+      {
+        "SnapshotNumber": 2,
+        "GenerationID": "3e5fb057-e312-4784-80ed-49b4b8117f79",
+        "OriginalDevice": {
+          "TrackingID": "vdc",
+          "DevicePath": "/dev/vdc",
+          "Major": 252,
+          "Minor": 32
+        },
+        "SnapshotImage": {
+          "DevicePath": "/dev/veeamimage1",
+          "Major": 251,
+          "Minor": 1
+        }
+      }
+    ]
+  }
+]
+```
+
+### Delete snapshot
+
+```bash
+DELETE /api/v1/snapshots/{snapshotID}/
+```
+
+Example usage:
+
+```bash
+curl -s -X DELETE \
+  --cert /etc/coriolis-snapshot-agent/ssl/client-pub.pem \
+  --key /etc/coriolis-snapshot-agent/ssl/client-key.pem \
+  --cacert /etc/coriolis-snapshot-agent/ssl/ca-pub.pem \
+  https://192.168.122.87:9999/api/v1/snapshots/18446633009895023040/
+```
+
+### Get snapshot changes
+
+This endpoint allows you to fetch a list os changes from a previous snapshot. IS you do not have a previous snapshot, this endpoint will return one big range, encompasing the entire disk.
+
+```bash
+GET /api/v1/snapshots/{snapshotID}/changes/{trackedDiskID}/
+```
+
+| Name | Type | Optional | Description |
+| ---- | ---- | -------- | ----------- |
+| previousGenerationID | string | true | The generation ID of the previous snapshot. |
+| previousNumber | int | true | The number of the previous snapshot. |
+
+Get entire disk example:
+
+```bash
+curl -s -X GET \
+  --cert /etc/coriolis-snapshot-agent/ssl/client-pub.pem \
+  --key /etc/coriolis-snapshot-agent/ssl/client-key.pem \
+  --cacert /etc/coriolis-snapshot-agent/ssl/ca-pub.pem \
+  https://192.168.122.87:9999/api/v1/snapshots/18446633009963518464/changes/vda|jq
+{
+  "tracked_disk_id": "vda",
+  "snapshot_id": "18446633009963518464",
+  "cbt_block_size_bytes": 262144,
+  "backup_type": "full",
+  "ranges": [
+    {
+      "start_offset": 0,
+      "length": 26843545600
+    }
+  ]
+}
+```
+
+Get changes from previous snapshot:
+
+```bash
+curl -s -X GET \
+  --cert /etc/coriolis-snapshot-agent/ssl/client-pub.pem \
+  --key /etc/coriolis-snapshot-agent/ssl/client-key.pem \
+  --cacert /etc/coriolis-snapshot-agent/ssl/ca-pub.pem \
+  "https://192.168.122.87:9999/api/v1/snapshots/18446633009963518464/changes/vda/?previousGenerationID=80564045-085a-4b1c-82d4-7410bce63d4a&previousNumber=3"|jq
+{
+  "tracked_disk_id": "vda",
+  "snapshot_id": "18446633009963518464",
+  "cbt_block_size_bytes": 262144,
+  "backup_type": "incremental",
+  "ranges": [
+    {
+      "start_offset": 1076887552,
+      "length": 262144
+    },
+    {
+      "start_offset": 7519338496,
+      "length": 262144
+    },
+    {
+      "start_offset": 7519862784,
+      "length": 262144
+    },
+    {
+      "start_offset": 7563378688,
+      "length": 262144
+    },
+    {
+      "start_offset": 11967135744,
+      "length": 1048576
+    },
+    {
+      "start_offset": 16109273088,
+      "length": 262144
+    },
+    {
+      "start_offset": 16115564544,
+      "length": 262144
+    },
+    {
+      "start_offset": 16275734528,
+      "length": 262144
+    },
+    {
+      "start_offset": 17999593472,
+      "length": 262144
+    },
+    {
+      "start_offset": 18000642048,
+      "length": 262144
+    },
+    {
+      "start_offset": 18122539008,
+      "length": 4194304
+    },
+    {
+      "start_offset": 18259640320,
+      "length": 262144
+    },
+    {
+      "start_offset": 20404240384,
+      "length": 262144
+    },
+    {
+      "start_offset": 20405026816,
+      "length": 262144
+    },
+    {
+      "start_offset": 20407648256,
+      "length": 786432
+    },
+    {
+      "start_offset": 20591673344,
+      "length": 262144
+    },
+    {
+      "start_offset": 20702035968,
+      "length": 524288
+    },
+    {
+      "start_offset": 20703084544,
+      "length": 262144
+    },
+    {
+      "start_offset": 20703608832,
+      "length": 524288
+    },
+    {
+      "start_offset": 20704919552,
+      "length": 786432
+    }
+  ]
+}
+```
+
+### Download snapshot data
+
+This endpoint allow you to download ranges of individual chunks of a particular snapshot.
+
+```bash
+GET /api/v1/snapshots/{snapshotID}/consume/{trackedDiskID}/
+```
+
+Example usage:
+
+```bash
+curl -s -X GET \
+  -r 20704919552-20705705983 \
+  --cert /etc/coriolis-snapshot-agent/ssl/client-pub.pem \
+  --key /etc/coriolis-snapshot-agent/ssl/client-key.pem \
+  --cacert /etc/coriolis-snapshot-agent/ssl/ca-pub.pem \
+  https://192.168.122.87:9999/api/v1/snapshots/18446633009963518464/consume/vda/ > /tmp/chunk
+```
+
+You should have a chunk of data in ```/tmp/chunk```, representing the last range from the previous example.
+
+```bash
+$ ls -lh /tmp/chunk
+-rw-rw-r-- 1 gabriel gabriel 768K Jun 28 14:38 /tmp/chunk
+```

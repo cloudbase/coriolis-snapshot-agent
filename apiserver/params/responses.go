@@ -148,7 +148,7 @@ type SnapStoreLocation struct {
 	TotalCapacity uint64 `json:"total_capacity"`
 	// Path is the path on the filesystem to the folder where
 	// snap store storage is allocated.
-	Path string
+	Path string `json:"path"`
 	// DevicePath is the device in /dev which the folder represented
 	// by Path is stored in.
 	DevicePath string `json:"device_path"`

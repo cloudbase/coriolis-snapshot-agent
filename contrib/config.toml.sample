@@ -8,6 +8,9 @@ log_file = "/tmp/coriolis-snapshot-agent.log"
 # that make up that device mapper, will be excluded. Paths set here, should
 # be on a separate block volume (physical, iSCSI, rbd, etc). 
 snapstore_destinations = ["/mnt/snapstores/snapstore_files"]
+
+# auto_init_physical_disks, if true will automatically add all physical
+# disks that are not set as a snap store destination, under tracking.
 auto_init_physical_disks = true
 
 # Snapstore mappings are a quick way to pre-configure snap store mappings.
@@ -23,6 +26,17 @@ device = "vda"
 # location must be one of the locations configured in the snapstore_destinations
 # option above.
 location = "/mnt/snapstores/snapstore_files"
+
+# Snap store file size is the size in bytes of the chunks of disk space that will
+# be added to a snap store in the event that a snap store reaches their
+# "empty limit". The empty limit is a threshold set on every created snap store
+# that is equal to the size of this setting, where the agent gets notified that
+# it needs to add more disk space. The disk space it adds is in increments of
+# bytes, dictated by this option. The default value is 2 GB.
+# So for example, if you set this option to 2 GB, if the disk space available
+# to a snap store drops bellow 2 GB, an event is triggered that prompts the agent
+# to add another 2 GB chunk of space to a snap store.
+snap_store_file_size = 2147483648
 
 [[snapstore_mapping]]
 device = "vdc"

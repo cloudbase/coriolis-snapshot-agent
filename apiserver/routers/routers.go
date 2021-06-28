@@ -32,18 +32,18 @@ func NewAPIRouter(han *controllers.APIController, logWriter io.Writer) *mux.Rout
 	// Snapshots //
 	///////////////
 	// view or delete a single snapshot.
-	apiRouter.Handle("/snapshots/{snapshotID}", log(logWriter, http.HandlerFunc(han.GetSnapshotHandler))).Methods("GET")
-	apiRouter.Handle("/snapshots/{snapshotID}/", log(logWriter, http.HandlerFunc(han.GetSnapshotHandler))).Methods("GET")
-
-	apiRouter.Handle("/snapshots/{snapshotID}", log(logWriter, http.HandlerFunc(han.DeleteSnapshotHandler))).Methods("DELETE")
-	apiRouter.Handle("/snapshots/{snapshotID}/", log(logWriter, http.HandlerFunc(han.DeleteSnapshotHandler))).Methods("DELETE")
-
 	// Create and view snapshots endpoint.
 	apiRouter.Handle("/snapshots", log(logWriter, http.HandlerFunc(han.ListSnapshotsHandler))).Methods("GET")
 	apiRouter.Handle("/snapshots/", log(logWriter, http.HandlerFunc(han.ListSnapshotsHandler))).Methods("GET")
 
 	apiRouter.Handle("/snapshots", log(logWriter, http.HandlerFunc(han.CreateSnapshotHandler))).Methods("POST")
 	apiRouter.Handle("/snapshots/", log(logWriter, http.HandlerFunc(han.CreateSnapshotHandler))).Methods("POST")
+
+	apiRouter.Handle("/snapshots/{snapshotID}", log(logWriter, http.HandlerFunc(han.DeleteSnapshotHandler))).Methods("DELETE")
+	apiRouter.Handle("/snapshots/{snapshotID}/", log(logWriter, http.HandlerFunc(han.DeleteSnapshotHandler))).Methods("DELETE")
+
+	apiRouter.Handle("/snapshots/{snapshotID}", log(logWriter, http.HandlerFunc(han.GetSnapshotHandler))).Methods("GET")
+	apiRouter.Handle("/snapshots/{snapshotID}/", log(logWriter, http.HandlerFunc(han.GetSnapshotHandler))).Methods("GET")
 
 	apiRouter.Handle("/snapshots/{snapshotID}", log(logWriter, http.HandlerFunc(han.DeleteSnapshotHandler))).Methods("DELETE")
 	apiRouter.Handle("/snapshots/{snapshotID}/", log(logWriter, http.HandlerFunc(han.DeleteSnapshotHandler))).Methods("DELETE")
@@ -58,9 +58,6 @@ func NewAPIRouter(han *controllers.APIController, logWriter io.Writer) *mux.Rout
 	// Read snap stores
 	apiRouter.Handle("/snapstores", log(logWriter, http.HandlerFunc(han.ListSnapStoreHandler))).Methods("GET")
 	apiRouter.Handle("/snapstores/", log(logWriter, http.HandlerFunc(han.ListSnapStoreHandler))).Methods("GET")
-	// Create snap store
-	// apiRouter.Handle("/snapstores", log(logWriter, http.HandlerFunc(han.CreateSnapStoreHandler))).Methods("POST")
-	// apiRouter.Handle("/snapstores/", log(logWriter, http.HandlerFunc(han.CreateSnapStoreHandler))).Methods("POST")
 
 	apiRouter.Handle("/snapstorelocations", log(logWriter, http.HandlerFunc(han.ListSnapStoreLocations))).Methods("GET")
 	apiRouter.Handle("/snapstorelocations/", log(logWriter, http.HandlerFunc(han.ListSnapStoreLocations))).Methods("GET")
@@ -71,9 +68,6 @@ func NewAPIRouter(han *controllers.APIController, logWriter io.Writer) *mux.Rout
 
 	apiRouter.Handle("/snapstoremappings", log(logWriter, http.HandlerFunc(han.CreateSnapStoreMappingHandler))).Methods("POST")
 	apiRouter.Handle("/snapstoremappings/", log(logWriter, http.HandlerFunc(han.CreateSnapStoreMappingHandler))).Methods("POST")
-
-	apiRouter.Handle("/snapstoremappings/{mappingID}", log(logWriter, http.HandlerFunc(han.ListSnapStoreHandler))).Methods("DELETE")
-	apiRouter.Handle("/snapstoremappings/{mappingID}/", log(logWriter, http.HandlerFunc(han.ListSnapStoreHandler))).Methods("DELETE")
 
 	// Not found handler
 	apiRouter.PathPrefix("/").Handler(log(logWriter, http.HandlerFunc(han.NotFoundHandler)))
