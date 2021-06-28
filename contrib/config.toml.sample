@@ -1,0 +1,19 @@
+log_file = "/var/log/coriolis-snapshot-agent.log"
+snapstore_destinations = ["/mnt/snapstores/snapstore_files"]
+auto_init_physical_disks = true
+
+[[snapstore_mapping]]
+device = "vda"
+location = "/mnt/snapstores/snapstore_files"
+
+[[snapstore_mapping]]
+device = "vdc"
+location = "/mnt/snapstores/snapstore_files" 
+
+[api]
+bind = "0.0.0.0"
+port = 9999
+	[api.tls]
+	certificate = "/etc/coriolis-snapshot-agent/certs/srv-pub.pem"
+	key = "/etc/coriolis-snapshot-agent/certs/srv-key.pem"
+	ca_certificate = "/etc/coriolis-snapshot-agent/certs/ca-pub.pem"

@@ -151,10 +151,104 @@ The agent uses a [bbolt](https://github.com/etcd-io/bbolt), key-value part datab
 
 ## Instalation
 
+### Kernel module instalation
+
+Clone the module:
+
+```bash
+git clone https://github.com/veeam/veeamsnap
+```
+
+Install the module:
+
+```bash
+cd veeamsnap/source
+make
+make install
+```
+
+If you're on a debian based system:
+
+```bash
+make dkms-deb-pkg
+dpkg -i ../veeamsnap_5.0.0.0_all.deb
+```
+
+Add the module to ```/etc/modules```. This will load it at boot:
+
+```bash
+cat /etc/modules
+veeamsnap
+```
+
+Create persistend udev rules to grant the right permissions on the character device:
+
+```bash
+# /etc/udev/rules.d/99-veeamsnap.rules
+KERNEL=="veeamsnap", OWNER="root", GROUP="disk"
+```
+
+### Coriolis snapshot agent instalation
+
 Build the binary. You will need to have docker installed:
 
 ```bash
 make
 ```
 
-After the command returns, you'll have a statically built binary in your current folder.
+After the command returns, you'll have a statically built binary in your current folder. simply copy the binary anywhere in your ```$PATH```:
+
+```bash
+cp coriolis-snapshot-agent /usr/local/bin
+```
+
+Add a user:
+
+```bash
+useradd --system --home-dir=/nonexisting --groups disk --no-create-home --shell /bin/false coriolis
+```
+
+Create a service definition:
+
+```bash
+cp contrib/coriolis-snapshot-agent.service.sample /etc/systemd/system/coriolis-snapshot-agent.service
+systemctl daemon-reload
+```
+
+Create the config folder:
+
+```bash
+mkdir /etc/coriolis-snapshot-agent
+```
+
+Copy and edit the sample config
+
+```bash
+cp contrib/config.toml.sample /etc/coriolis-snapshot-agent/config.toml
+```
+
+The agent uses client x509 certificates for authentication. To gain access to the API, you must generate proper server and client certificates. The server certificate and the CA certificate must be correctly configured in the above mentioned config file. Here is a quick and dirty way to generate the certificates for testing:
+
+```bash
+wget https://gist.githubusercontent.com/gabriel-samfira/61663ec3c07652d4deeeccfdec319d64/raw/ba1a37dedeb224516b0c44fb4c171ac4c8ed1f10/gen_certs.go
+go build ./gen_certs.go
+
+sudo mkdir -p /etc/coriolis-snapshot-agent/certs
+sudo ./gen_certs -output-dir /etc/coriolis-snapshot-agent/certs -certificate-hosts localhost,127.0.0.1
+```
+
+Change ownership of folder:
+
+```bash
+chown coriolis:disk -R /etc/coriolis-snapshot-agent
+```
+
+Enable and start the service:
+
+```bash
+systemctl daemon-reload
+systemctl enable coriolis-snapshot-agent
+systemctl start coriolis-snapshot-agent
+```
+
+## Agent API
