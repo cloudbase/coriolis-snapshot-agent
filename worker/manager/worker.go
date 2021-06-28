@@ -4,8 +4,8 @@ import (
 	"log"
 	"time"
 
-	"coriolis-veeam-bridge/db"
-	"coriolis-veeam-bridge/worker/common"
+	"coriolis-snapshot-agent/db"
+	"coriolis-snapshot-agent/worker/common"
 
 	"github.com/pkg/errors"
 )

@@ -12,22 +12,22 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/pkg/errors"
 
-	vErrors "coriolis-veeam-bridge/errors"
-	"coriolis-veeam-bridge/internal/storage"
-	"coriolis-veeam-bridge/internal/types"
-	"coriolis-veeam-bridge/internal/util"
+	vErrors "coriolis-snapshot-agent/errors"
+	"coriolis-snapshot-agent/internal/storage"
+	"coriolis-snapshot-agent/internal/types"
+	"coriolis-snapshot-agent/internal/util"
 )
 
 const (
 	// DefaultConfigFile is the default path to the OVM exporter config
-	DefaultConfigFile = "/etc/coriolis-veeam-bridge/config.toml"
+	DefaultConfigFile = "/etc/coriolis-snapshot-agent/config.toml"
 
 	// DefaultDBFile is the default location for the DB file.
 	// We cannot persist CBT info and snapshots across reboots. Saving
 	// the application state in an ephemeral folder saves us the trouble
 	// of detecting a reboot and cleaning up stale data. We just recreate
 	// the database from scratch and initialize snap stores, tracking, etc.
-	DefaultDBFile = "/var/run/coriolis-veeam-bridge/coriolis-veeam-bridge.db"
+	DefaultDBFile = "/var/run/coriolis-snapshot-agent/coriolis-snapshot-agent.db"
 
 	// DefaultListenPort is the default HTTPS listen port
 	DefaultListenPort = 8899
@@ -102,7 +102,7 @@ func (s *SnapStoreMapping) Validate() error {
 	return nil
 }
 
-// Config is the coriolis-veeam-bridge config
+// Config is the coriolis-snapshot-agent config
 type Config struct {
 	// DBFile is the path on disk to the database location
 	DBFile string `toml:"db_file"`

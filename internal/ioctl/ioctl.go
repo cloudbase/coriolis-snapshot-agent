@@ -57,8 +57,8 @@ import (
 
 	"github.com/pkg/errors"
 
-	"coriolis-veeam-bridge/internal/types"
-	"coriolis-veeam-bridge/internal/util"
+	"coriolis-snapshot-agent/internal/types"
+	"coriolis-snapshot-agent/internal/util"
 )
 
 func cToGoUUID(uuid [16]C.uchar) (goUUID [16]byte) {

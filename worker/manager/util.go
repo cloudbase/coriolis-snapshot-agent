@@ -1,9 +1,9 @@
 package manager
 
 import (
-	"coriolis-veeam-bridge/apiserver/params"
-	"coriolis-veeam-bridge/db"
-	"coriolis-veeam-bridge/internal/storage"
+	"coriolis-snapshot-agent/apiserver/params"
+	"coriolis-snapshot-agent/db"
+	"coriolis-snapshot-agent/internal/storage"
 )
 
 func internalVolumeSnapToParamvolumeSnap(vol db.VolumeSnapshot) params.VolumeSnapshot {

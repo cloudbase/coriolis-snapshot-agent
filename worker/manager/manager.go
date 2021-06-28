@@ -15,14 +15,14 @@ import (
 	"github.com/pkg/errors"
 	"github.com/timshannon/bolthold"
 
-	"coriolis-veeam-bridge/apiserver/params"
-	"coriolis-veeam-bridge/config"
-	"coriolis-veeam-bridge/db"
-	vErrors "coriolis-veeam-bridge/errors"
-	"coriolis-veeam-bridge/internal/ioctl"
-	"coriolis-veeam-bridge/internal/storage"
-	"coriolis-veeam-bridge/internal/types"
-	"coriolis-veeam-bridge/worker/snapstore"
+	"coriolis-snapshot-agent/apiserver/params"
+	"coriolis-snapshot-agent/config"
+	"coriolis-snapshot-agent/db"
+	vErrors "coriolis-snapshot-agent/errors"
+	"coriolis-snapshot-agent/internal/ioctl"
+	"coriolis-snapshot-agent/internal/storage"
+	"coriolis-snapshot-agent/internal/types"
+	"coriolis-snapshot-agent/worker/snapstore"
 )
 
 type NotificationType string

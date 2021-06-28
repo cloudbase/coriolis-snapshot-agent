@@ -8,7 +8,7 @@ import (
 
 	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 
-	"coriolis-veeam-bridge/config"
+	"coriolis-snapshot-agent/config"
 )
 
 // GetLoggingWriter returns a new io.Writer suitable for logging.

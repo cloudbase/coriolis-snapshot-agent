@@ -1,8 +1,8 @@
 package internal
 
 import (
-	"coriolis-veeam-bridge/internal/types"
-	"coriolis-veeam-bridge/internal/util"
+	"coriolis-snapshot-agent/internal/types"
+	"coriolis-snapshot-agent/internal/util"
 	"os"
 
 	"github.com/google/uuid"

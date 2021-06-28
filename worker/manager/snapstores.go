@@ -1,14 +1,14 @@
 package manager
 
 import (
-	"coriolis-veeam-bridge/apiserver/params"
-	"coriolis-veeam-bridge/db"
-	vErrors "coriolis-veeam-bridge/errors"
-	"coriolis-veeam-bridge/internal/ioctl"
-	"coriolis-veeam-bridge/internal/types"
-	"coriolis-veeam-bridge/internal/util"
-	"coriolis-veeam-bridge/worker/common"
-	"coriolis-veeam-bridge/worker/snapstore"
+	"coriolis-snapshot-agent/apiserver/params"
+	"coriolis-snapshot-agent/db"
+	vErrors "coriolis-snapshot-agent/errors"
+	"coriolis-snapshot-agent/internal/ioctl"
+	"coriolis-snapshot-agent/internal/types"
+	"coriolis-snapshot-agent/internal/util"
+	"coriolis-snapshot-agent/worker/common"
+	"coriolis-snapshot-agent/worker/snapstore"
 	"io/fs"
 	"log"
 	"os"

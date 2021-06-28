@@ -1,7 +1,7 @@
 package snapstore
 
 import (
-	"coriolis-veeam-bridge/internal/types"
+	"coriolis-snapshot-agent/internal/types"
 	"encoding/binary"
 
 	"github.com/pkg/errors"

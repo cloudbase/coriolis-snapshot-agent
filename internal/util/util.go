@@ -8,9 +8,9 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 
-	veeamErrors "coriolis-veeam-bridge/errors"
-	"coriolis-veeam-bridge/internal/storage"
-	"coriolis-veeam-bridge/internal/types"
+	veeamErrors "coriolis-snapshot-agent/errors"
+	"coriolis-snapshot-agent/internal/storage"
+	"coriolis-snapshot-agent/internal/types"
 )
 
 type PhysicalDiskInfo struct {

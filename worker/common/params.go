@@ -1,6 +1,6 @@
 package common
 
-import "coriolis-veeam-bridge/internal/types"
+import "coriolis-snapshot-agent/internal/types"
 
 type CreateSnapStoreParams struct {
 	ID                [16]byte

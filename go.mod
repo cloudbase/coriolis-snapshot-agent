@@ -1,4 +1,4 @@
-module coriolis-veeam-bridge
+module coriolis-snapshot-agent
 
 go 1.16
 

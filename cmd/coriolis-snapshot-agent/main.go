@@ -3,25 +3,33 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"coriolis-veeam-bridge/apiserver/controllers"
-	"coriolis-veeam-bridge/apiserver/routers"
-	"coriolis-veeam-bridge/config"
-	"coriolis-veeam-bridge/util"
-	"coriolis-veeam-bridge/worker/manager"
+	"coriolis-snapshot-agent/apiserver/controllers"
+	"coriolis-snapshot-agent/apiserver/routers"
+	"coriolis-snapshot-agent/config"
+	"coriolis-snapshot-agent/util"
+	"coriolis-snapshot-agent/worker/manager"
 )
 
 var (
-	conf = flag.String("config", config.DefaultConfigFile, "exporter config file")
+	conf    = flag.String("config", config.DefaultConfigFile, "exporter config file")
+	version = flag.Bool("version", false, "prints version")
 )
+
+var Version string
 
 func main() {
 	flag.Parse()
+	if *version {
+		fmt.Println(Version)
+		return
+	}
 
 	stop := make(chan os.Signal, 2)
 	signal.Notify(stop, syscall.SIGTERM)

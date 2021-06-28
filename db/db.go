@@ -9,8 +9,8 @@ import (
 	"github.com/timshannon/bolthold"
 	"go.etcd.io/bbolt"
 
-	vErrors "coriolis-veeam-bridge/errors"
-	"coriolis-veeam-bridge/internal/types"
+	vErrors "coriolis-snapshot-agent/errors"
+	"coriolis-snapshot-agent/internal/types"
 )
 
 // Open opens the database at path and returns a *bolt.DB object

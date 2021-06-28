@@ -4,7 +4,7 @@ import (
 	"io"
 	"net/http"
 
-	"coriolis-veeam-bridge/apiserver/controllers"
+	"coriolis-snapshot-agent/apiserver/controllers"
 
 	gorillaHandlers "github.com/gorilla/handlers"
 	"github.com/gorilla/mux"

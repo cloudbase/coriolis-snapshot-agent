@@ -1,11 +1,11 @@
 package manager
 
 import (
-	"coriolis-veeam-bridge/apiserver/params"
-	"coriolis-veeam-bridge/db"
-	vErrors "coriolis-veeam-bridge/errors"
-	"coriolis-veeam-bridge/internal/types"
-	"coriolis-veeam-bridge/internal/util"
+	"coriolis-snapshot-agent/apiserver/params"
+	"coriolis-snapshot-agent/db"
+	vErrors "coriolis-snapshot-agent/errors"
+	"coriolis-snapshot-agent/internal/types"
+	"coriolis-snapshot-agent/internal/util"
 
 	"github.com/pkg/errors"
 )

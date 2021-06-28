@@ -16,7 +16,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	vErrors "coriolis-veeam-bridge/errors"
+	vErrors "coriolis-snapshot-agent/errors"
 )
 
 const (

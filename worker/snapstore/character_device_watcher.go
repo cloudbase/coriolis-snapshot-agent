@@ -10,12 +10,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 
-	vErrors "coriolis-veeam-bridge/errors"
-	"coriolis-veeam-bridge/internal/ioctl"
-	"coriolis-veeam-bridge/internal/storage"
-	"coriolis-veeam-bridge/internal/types"
-	"coriolis-veeam-bridge/internal/util"
-	"coriolis-veeam-bridge/worker/common"
+	vErrors "coriolis-snapshot-agent/errors"
+	"coriolis-snapshot-agent/internal/ioctl"
+	"coriolis-snapshot-agent/internal/storage"
+	"coriolis-snapshot-agent/internal/types"
+	"coriolis-snapshot-agent/internal/util"
+	"coriolis-snapshot-agent/worker/common"
 )
 
 func NewSnapStoreCharacterDeviceWatcher(param common.CreateSnapStoreParams, watcherChan chan interface{}) (*CharacterDeviceWatcher, error) {

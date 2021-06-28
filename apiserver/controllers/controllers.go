@@ -11,9 +11,9 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
 
-	"coriolis-veeam-bridge/apiserver/params"
-	vErrors "coriolis-veeam-bridge/errors"
-	"coriolis-veeam-bridge/worker/manager"
+	"coriolis-snapshot-agent/apiserver/params"
+	vErrors "coriolis-snapshot-agent/errors"
+	"coriolis-snapshot-agent/worker/manager"
 )
 
 // NewAPIController returns a new instance of APIController
