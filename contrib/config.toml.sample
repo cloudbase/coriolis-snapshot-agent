@@ -1,9 +1,27 @@
-log_file = "/var/log/coriolis-snapshot-agent.log"
+# Path to coriolis snapshot agent log file
+log_file = "/tmp/coriolis-snapshot-agent.log"
+
+# snapstore_destinations is an array of paths on disk where the snap
+# store watchers will allocate disk space for the snap stores. The device
+# on which these folders reside, will be excluded from the list of
+# snapshot-able disks. If this path is on a device mapper, all disks
+# that make up that device mapper, will be excluded. Paths set here, should
+# be on a separate block volume (physical, iSCSI, rbd, etc). 
 snapstore_destinations = ["/mnt/snapstores/snapstore_files"]
 auto_init_physical_disks = true
 
+# Snapstore mappings are a quick way to pre-configure snap store mappings.
+# When creating a snapshot, the agent will look for a mapping of where it
+# could define a new snap store to hold the CoW chunks for a disk. If no
+# mappings are specified here, before you can take a snapshot of a disk,
+# you must create a snapstore mapping through the API. Considering that
+# disks do not really change, the best way to go about this is to define the
+# mappings in the config.
 [[snapstore_mapping]]
+# device is the device name for which we need to create a mapping for.
 device = "vda"
+# location must be one of the locations configured in the snapstore_destinations
+# option above.
 location = "/mnt/snapstores/snapstore_files"
 
 [[snapstore_mapping]]
@@ -11,9 +29,13 @@ device = "vdc"
 location = "/mnt/snapstores/snapstore_files" 
 
 [api]
+# IP address to bind to
 bind = "0.0.0.0"
+# Port to listen on
 port = 9999
 	[api.tls]
-	certificate = "/etc/coriolis-snapshot-agent/certs/srv-pub.pem"
-	key = "/etc/coriolis-snapshot-agent/certs/srv-key.pem"
-	ca_certificate = "/etc/coriolis-snapshot-agent/certs/ca-pub.pem"
+	# x509 settings for this daemon. The agent will validate client
+	# certificates before answering to API requests.
+	certificate = "/etc/coriolis-snapshot-agent/ssl/srv-pub.pem"
+	key = "/etc/coriolis-snapshot-agent/ssl/srv-key.pem"
+	ca_certificate = "/etc/coriolis-snapshot-agent/ssl/ca-pub.pem"

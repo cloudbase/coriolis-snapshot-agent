@@ -28,15 +28,6 @@ func NewAPIRouter(han *controllers.APIController, logWriter io.Writer) *mux.Rout
 	apiRouter.Handle("/disks/{diskTrackingID}", log(logWriter, http.HandlerFunc(han.GetDiskHandler))).Methods("GET")
 	apiRouter.Handle("/disks/{diskTrackingID}/", log(logWriter, http.HandlerFunc(han.GetDiskHandler))).Methods("GET")
 
-	// Create/view snap stores for a disk
-	apiRouter.Handle("/disks/{diskTrackingID}/snapstore", log(logWriter, http.HandlerFunc(han.ListDisksHandler))).Methods("GET")
-	apiRouter.Handle("/disks/{diskTrackingID}/snapstore/", log(logWriter, http.HandlerFunc(han.ListDisksHandler))).Methods("GET")
-
-	// View single disk snapshots. This is read only. Any create/delete operations needs to be done
-	// using the /snapshots endpoint. A snapshot can encompass multiple disks.
-	apiRouter.Handle("/disks/{diskTrackingID}/snapshots", log(logWriter, http.HandlerFunc(han.ListDisksHandler))).Methods("GET")
-	apiRouter.Handle("/disks/{diskTrackingID}/snapshots/", log(logWriter, http.HandlerFunc(han.ListDisksHandler))).Methods("GET")
-
 	///////////////
 	// Snapshots //
 	///////////////
