@@ -834,7 +834,7 @@ GET /api/v1/systeminfo/
 
 Example usage:
 
-```
+```bash
 curl -s -X GET \
   --cert /etc/coriolis-snapshot-agent/ssl/client-pub.pem \
   --key /etc/coriolis-snapshot-agent/ssl/client-key.pem \
