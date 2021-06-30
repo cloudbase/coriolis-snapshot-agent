@@ -45,7 +45,7 @@ type FileSystemInfo struct {
 // of individual partitions.
 func FindAllInvolvedDevices(devices []types.DevID) ([]string, error) {
 	var ret []string
-	allDevices, err := storage.BlockDeviceList(false)
+	allDevices, err := storage.BlockDeviceList(false, true)
 	if err != nil {
 		return nil, errors.Wrap(err, "fetching devices")
 	}
@@ -95,7 +95,7 @@ func GetBlockDeviceInfoFromFile(path string) (PhysicalDiskInfo, error) {
 	major := unix.Major(sysStat.Dev)
 	minor := unix.Minor(sysStat.Dev)
 
-	devices, err := storage.BlockDeviceList(false)
+	devices, err := storage.BlockDeviceList(false, true)
 	if err != nil {
 		return PhysicalDiskInfo{}, errors.Wrap(err, "fetching block devices")
 	}
@@ -199,7 +199,7 @@ func GetFileRanges(filePath string) ([]types.Range, types.DevID, error) {
 }
 
 func FindDeviceByPath(path string) (types.DevID, error) {
-	devices, err := storage.BlockDeviceList(false)
+	devices, err := storage.BlockDeviceList(false, true)
 	if err != nil {
 		return types.DevID{}, errors.Wrap(err, "fetching block devices")
 	}

@@ -69,6 +69,9 @@ func NewAPIRouter(han *controllers.APIController, logWriter io.Writer) *mux.Rout
 	apiRouter.Handle("/snapstoremappings", log(logWriter, http.HandlerFunc(han.CreateSnapStoreMappingHandler))).Methods("POST")
 	apiRouter.Handle("/snapstoremappings/", log(logWriter, http.HandlerFunc(han.CreateSnapStoreMappingHandler))).Methods("POST")
 
+	// System info
+	apiRouter.Handle("/systeminfo", log(logWriter, http.HandlerFunc(han.SystemInfoHandler))).Methods("GET")
+	apiRouter.Handle("/systeminfo/", log(logWriter, http.HandlerFunc(han.SystemInfoHandler))).Methods("GET")
 	// Not found handler
 	apiRouter.PathPrefix("/").Handler(log(logWriter, http.HandlerFunc(han.NotFoundHandler)))
 

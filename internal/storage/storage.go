@@ -435,7 +435,7 @@ func GetBlockDeviceInfo(name string) (BlockVolume, error) {
 // BlockDeviceList returns a list of BlockVolume structures, populated with
 // information about locally visible disks. This does not include the block
 // device chunks.
-func BlockDeviceList(ignoreMounted bool) ([]BlockVolume, error) {
+func BlockDeviceList(ignoreMounted bool, includeVirtual bool) ([]BlockVolume, error) {
 	devList, err := ioutil.ReadDir(sysfsPath)
 	if err != nil {
 		return nil, err
@@ -449,6 +449,9 @@ func BlockDeviceList(ignoreMounted bool) ([]BlockVolume, error) {
 				continue
 			}
 			return ret, err
+		}
+		if info.IsVirtual && !includeVirtual {
+			continue
 		}
 		// NOTE (gsamfira): should we filter here, or before presenting the information
 		// to the client? We may want to convey to the client info on mounted
@@ -469,7 +472,7 @@ func BlockDeviceList(ignoreMounted bool) ([]BlockVolume, error) {
 // FindDeviceByID returns the path in /dev to a device identified
 // by major:minor.
 func FindDeviceByID(major uint32, minor uint32) (string, error) {
-	devices, err := BlockDeviceList(false)
+	devices, err := BlockDeviceList(false, true)
 	if err != nil {
 		return "", errors.Wrap(err, "fetching devices")
 	}
@@ -492,7 +495,7 @@ func FindDeviceByID(major uint32, minor uint32) (string, error) {
 // FindBlockVolumeByID returns a BlockVolume{} that identifies the device with
 // major:minor.
 func FindBlockVolumeByID(major uint32, minor uint32) (BlockVolume, error) {
-	devices, err := BlockDeviceList(false)
+	devices, err := BlockDeviceList(false, true)
 	if err != nil {
 		return BlockVolume{}, errors.Wrap(err, "fetching devices")
 	}

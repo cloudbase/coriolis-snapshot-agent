@@ -172,7 +172,7 @@ func (m *Snapshot) Unlock() {
 }
 
 func (m *Snapshot) listDisks(includeVirtual bool) ([]storage.BlockVolume, error) {
-	devices, err := storage.BlockDeviceList(false)
+	devices, err := storage.BlockDeviceList(false, includeVirtual)
 	if err != nil {
 		return nil, errors.Wrap(err, "listing devices")
 	}
@@ -181,10 +181,6 @@ func (m *Snapshot) listDisks(includeVirtual bool) ([]storage.BlockVolume, error)
 
 	var ret []storage.BlockVolume
 	for _, val := range devices {
-		if !includeVirtual && val.IsVirtual {
-			continue
-		}
-
 		shouldExclude := false
 		for _, cowDevice := range toExclude {
 			if cowDevice == val.Path {

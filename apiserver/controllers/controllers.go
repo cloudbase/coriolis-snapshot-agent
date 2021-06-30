@@ -13,6 +13,7 @@ import (
 
 	"coriolis-snapshot-agent/apiserver/params"
 	vErrors "coriolis-snapshot-agent/errors"
+	"coriolis-snapshot-agent/internal/system"
 	"coriolis-snapshot-agent/worker/manager"
 )
 
@@ -226,6 +227,15 @@ func (a *APIController) ConsumeSnapshotHandler(w http.ResponseWriter, r *http.Re
 	}
 	defer fp.Close()
 	http.ServeContent(w, r, imgPath, time.Time{}, fp)
+}
+
+func (a *APIController) SystemInfoHandler(w http.ResponseWriter, r *http.Request) {
+	info, err := system.GetSystemInfo()
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+	json.NewEncoder(w).Encode(info)
 }
 
 // utils
