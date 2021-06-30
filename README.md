@@ -35,7 +35,7 @@ There are a few things to keep in mind though:
   * There is currently no way to persist CBT data between reboots. Everything is kept in RAM, so if the system reboots, you lose your bitmaps and tracking info and you have to do a full sync.
   * Each element of the array is one byte. That means you can only keep track of 255 consecutive snapshots, after which the bitmap resets.
 
-To know when a CBT bitmap has been reset, the kernel module adds a ```uuid4``` unique identifier to the CBT bitmap itself, called a **generation ID**. If the generation ID you recorded after a previous backup is different from the current gneration ID of the block volume, you know you have to do a full sync.  
+To know when a CBT bitmap has been reset, the kernel module adds a ```uuid4``` unique identifier to the CBT bitmap itself, called a **generation ID**. If the generation ID you recorded after a previous backup is different from the current generation ID of the block volume, you know you have to do a full sync.
 
 ### Tracking
 
@@ -67,19 +67,19 @@ gabriel@rossak:/tmp$ truncate -s 2048M ./sparse_test
 
 Check the space use by the sparse file:
 ```shell
-gabriel@rossak:/tmp$ du -sh ./sparse_test 
-0	./sparse_test
+gabriel@rossak:/tmp$ du -sh ./sparse_test
+0    ./sparse_test
 ```
 
 Check the extents used by the sparse file:
 
 ```shell
-gabriel@rossak:/tmp$ sudo hdparm --fibmap ./sparse_test 
+gabriel@rossak:/tmp$ sudo hdparm --fibmap ./sparse_test
 
 ./sparse_test:
  filesystem blocksize 4096, begins at LBA 532480; assuming 512 byte sectors.
  byte_offset  begin_LBA    end_LBA    sectors
- ```
+```
 
 As you can see, there is nothing we can use.
 
@@ -93,8 +93,8 @@ gabriel@rossak:/tmp$ fallocate -l 2048M ./fallocate_test
 Check disk space usage:
 
 ```shell
-gabriel@rossak:/tmp$ du -sh ./fallocate_test 
-2.1G	./fallocate_test
+gabriel@rossak:/tmp$ du -sh ./fallocate_test
+2.1G    ./fallocate_test
 ```
 
 Get the extents allocated to the file
@@ -109,7 +109,7 @@ Get the extents allocated to the file
 
 ```
 
-In this instance, we have 3 ranges of continuous bytes we can feed into the kernel module to be used as CoW destinations. But here is the catch with this approach, when taking into account the fact that we have a requirement to copy raw disks in their entirety. If the filesystem is on a device mapper, the sector ranges printed above, will probably not match those of the underlying devices we are tracking. Device mapper by it's nature, re-maps sectors from multiple individual block devices, into a different device, potentially larger device (LVM2 for example). As a result if the filesystem resides on a logical volume, the ranges that are reported by the operating system, are those of the device mapper, not those of the underlying disk.
+In this instance, we have 3 ranges of continuous bytes we can feed into the kernel module to be used as CoW destinations. But here is the catch with this approach, when taking into account the fact that we have a requirement to copy raw disks in their entirety. If the filesystem is on a device mapper, the sector ranges printed above, will probably not match those of the underlying devices we are tracking. Device mapper by its nature, re-maps sectors from multiple individual block devices, into a different device, potentially larger device (LVM2 for example). As a result if the filesystem resides on a logical volume, the ranges that are reported by the operating system, are those of the device mapper, not those of the underlying disk.
 
 Since Coriolis doesn't care about what device mapper volumes you have, we need to unmap those sectors and get the underlying physical sectors they actually point to, because we instruct the kernel module to track the entire, individual disks, not just a partition of those disks, or a device mapper. For example, say we have a LVM2 volume group, spanning 2 disks. Say you want to allocate ranges starting from sector 1000 to sector 1200. From the perspective of the logical volume, those ranges are continuous, but from the perspective of the underlying disks the device mapper maps to, that may mean sectors 800-900 on ```/dev/sda``` and sectors 0-100 on ```/dev/sdb```.
 
@@ -133,7 +133,7 @@ The kernel module exposes a character device called ```/dev/blk-snap```. A new 2
 
 The following notifications are sent by the kernel module through the 2-way pipe that was created:
 
-  * Half fill. This event indicates that the snap store is almost full. When creating a snap store though the character device, we have the option of setting a minimum threshold. The threashold is expressed in bytes of free space, that when reached, we should be notified. Say you want to be notified when the snap store only has 1 GB of disl space available, so you can add another 10 GB. When that threshold is reached, this event is triggered and a message is sent through the character device.
+  * Half fill. This event indicates that the snap store is almost full. When creating a snap store though the character device, we have the option of setting a minimum threshold. The threashold is expressed in bytes of free space, that when reached, we should be notified. Say you want to be notified when the snap store only has 1 GB of disk space available, so you can add another 10 GB. When that threshold is reached, this event is triggered and a message is sent through the character device.
   * Overflow. This event is triggered when the snap store ran out of disk space to place any new CoW extents. When this happens, your snapshot will become corrupt and you will most likely have to recreate it.
   * Teminate. This event is triggered when the snap store was deleted. We use this event to know when we need to clean up any allocated files.
 
@@ -143,7 +143,7 @@ Whenever a new snapshot is created, the agent will create a snap store. The heal
 
 ### What happens if I restart the agent?
 
-It's safe to restart the agent without cleaning up any snapshots or snap stores beforehand. The agent persists all info about resources it creates, in a local database. If restarted, it will reattach itself to the character device and register the needed watchers.
+It's safe to restart the agent without cleaning up any snapshots or snap stores beforehand. The agent persists all info about resources it creates in a local database. If restarted, it will reattach itself to the character device and register the needed watchers.
 
 ### What kind of database does the agent use?
 
@@ -261,14 +261,14 @@ log_file = "/tmp/coriolis-snapshot-agent.log"
 
 # snapstore_destinations is an array of paths on disk where the snap
 # store watchers will allocate disk space for the snap stores. The device
-# on which these folders reside, will be excluded from the list of
+# on which these folders reside will be excluded from the list of
 # snapshot-able disks. If this path is on a device mapper, all disks
-# that make up that device mapper, will be excluded. Paths set here, should
-# be on a separate block volume (physical, iSCSI, rbd, etc). 
+# that make up that device mapper will be excluded. Paths set here should
+# be on a separate block volume (physical, iSCSI, rbd, etc).
 snapstore_destinations = ["/mnt/snapstores/snapstore_files"]
 
 # auto_init_physical_disks, if true will automatically add all physical
-# disks that are not set as a snap store destination, under tracking.
+# disks that are not set as a snap store destination under tracking.
 auto_init_physical_disks = true
 
 # Snapstore mappings are a quick way to pre-configure snap store mappings.
@@ -298,19 +298,19 @@ snap_store_file_size = 2147483648
 
 [[snapstore_mapping]]
 device = "vdc"
-location = "/mnt/snapstores/snapstore_files" 
+location = "/mnt/snapstores/snapstore_files"
 
 [api]
 # IP address to bind to
 bind = "0.0.0.0"
 # Port to listen on
 port = 9999
-	[api.tls]
-	# x509 settings for this daemon. The agent will validate client
-	# certificates before answering to API requests.
-	certificate = "/etc/coriolis-snapshot-agent/ssl/srv-pub.pem"
-	key = "/etc/coriolis-snapshot-agent/ssl/srv-key.pem"
-	ca_certificate = "/etc/coriolis-snapshot-agent/ssl/ca-pub.pem"
+    [api.tls]
+    # x509 settings for this daemon. The agent will validate client
+    # certificates before answering to API requests.
+    certificate = "/etc/coriolis-snapshot-agent/ssl/srv-pub.pem"
+    key = "/etc/coriolis-snapshot-agent/ssl/srv-key.pem"
+    ca_certificate = "/etc/coriolis-snapshot-agent/ssl/ca-pub.pem"
 ```
 
 ## Agent API
@@ -549,12 +549,12 @@ curl -0 -X POST https://192.168.122.87:9999/api/v1/snapstoremappings/ \
   --cert /etc/coriolis-snapshot-agent/ssl/client-pub.pem \
   --key /etc/coriolis-snapshot-agent/ssl/client-key.pem \
   --cacert /etc/coriolis-snapshot-agent/ssl/ca-pub.pem \
-	-H "Content-type: application-json" \
-	--data-binary @- << EOF
-	{
-		"snapstore_location_id": "/mnt/snapstores/snapstore_files",
-		"tracked_disk_id": "vdc"
-	}
+    -H "Content-type: application-json" \
+    --data-binary @- << EOF
+    {
+        "snapstore_location_id": "/mnt/snapstores/snapstore_files",
+        "tracked_disk_id": "vdc"
+    }
 EOF
 ```
 
@@ -573,11 +573,11 @@ curl -s -X POST https://192.168.122.87:9999/api/v1/snapshots/ \
   --cert /etc/coriolis-snapshot-agent/ssl/client-pub.pem \
   --key /etc/coriolis-snapshot-agent/ssl/client-key.pem \
   --cacert /etc/coriolis-snapshot-agent/ssl/ca-pub.pem \
-	-H "Content-type: application-json" \
-	--data-binary @- << EOF
-	{
-		"tracked_disk_ids": ["vda", "vdc"]
-	}
+    -H "Content-type: application-json" \
+    --data-binary @- << EOF
+    {
+        "tracked_disk_ids": ["vda", "vdc"]
+    }
 EOF
 ```
 
@@ -660,7 +660,7 @@ curl -s -X DELETE \
 
 ### Get snapshot changes
 
-This endpoint allows you to fetch a list os changes from a previous snapshot. IS you do not have a previous snapshot, this endpoint will return one big range, encompasing the entire disk.
+This endpoint allows you to fetch a list of changes from a previous snapshot. If you do not have a previous snapshot, this endpoint will return one big range, encompasing the entire disk.
 
 ```bash
 GET /api/v1/snapshots/{snapshotID}/changes/{trackedDiskID}/
