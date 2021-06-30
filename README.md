@@ -816,3 +816,152 @@ You should have a chunk of data in ```/tmp/chunk```, representing the last range
 $ ls -lh /tmp/chunk
 -rw-rw-r-- 1 gabriel gabriel 768K Jun 28 14:38 /tmp/chunk
 ```
+
+### Fetch system info
+
+This endpoint returns information about the system. This includes:
+
+  * Platform
+  * OS name and version
+  * CPU information
+  * Block volume info
+  * Memory info
+  * Network interface information (HW address, name, IP addresses)
+
+```bash
+GET /api/v1/systeminfo/
+```
+
+Example usage:
+
+```
+curl -s -X GET \
+  --cert /etc/coriolis-snapshot-agent/ssl/client-pub.pem \
+  --key /etc/coriolis-snapshot-agent/ssl/client-key.pem \
+  --cacert /etc/coriolis-snapshot-agent/ssl/ca-pub.pem \
+  https://192.168.122.87:9999/api/v1/systeminfo|jq
+{
+  "memory": {
+    "total": 4125925376,
+    "available": 3045695488,
+    "used": 796946432,
+    "usedPercent": 19.315580369818107,
+    "free": 1758420992,
+    "active": 1409576960,
+    "inactive": 567996416,
+    "wired": 0,
+    "laundry": 0,
+    "buffers": 134098944,
+    "cached": 1436459008,
+    "writeBack": 0,
+    "dirty": 0,
+    "writeBackTmp": 0,
+    "shared": 1368064,
+    "slab": 243761152,
+    "sreclaimable": 124612608,
+    "sunreclaim": 119148544,
+    "pageTables": 7319552,
+    "swapCached": 0,
+    "commitLimit": 6190153728,
+    "committedAS": 2066169856,
+    "highTotal": 0,
+    "highFree": 0,
+    "lowTotal": 0,
+    "lowFree": 0,
+    "swapTotal": 4127191040,
+    "swapFree": 4127191040,
+    "mapped": 210579456,
+    "vmallocTotal": 35184372087808,
+    "vmallocUsed": 20566016,
+    "vmallocChunk": 0,
+    "hugePagesTotal": 0,
+    "hugePagesFree": 0,
+    "hugePageSize": 2097152
+  },
+  "cpus": {
+    "physical_cores": 4,
+    "logical_cores": 8,
+    "cpu_info": [
+      {
+        "cpu": 0,
+        "vendorId": "GenuineIntel",
+        "family": "6",
+        "model": "94",
+        "stepping": 3,
+        "physicalId": "0",
+        "coreId": "0",
+        "cores": 1,
+        "modelName": "Intel Core Processor (Skylake, IBRS)",
+        "mhz": 2591.998,
+        "cacheSize": 16384,
+        "flags": [
+          "vmx",
+          ..... truncated ....
+        ],
+        "microcode": "0x1"
+      },
+      ...... truncated .............
+  },
+  "network_interfaces": [
+    {
+      "mac_address": "52:54:00:ab:b2:84",
+      "ip_addresses": [
+        "192.168.122.87/24",
+        "fe80::5054:ff:feab:b284/64"
+      ],
+      "nic_name": "enp1s0"
+    },
+    {
+      "mac_address": "02:42:74:8a:aa:48",
+      "ip_addresses": [
+        "172.17.0.1/16",
+        "fe80::42:74ff:fe8a:aa48/64"
+      ],
+      "nic_name": "docker0"
+    }
+  ],
+  "disks": [
+    {
+      "Path": "/dev/vdb",
+      "PartitionTableType": "dos",
+      "PartitionTableUUID": "355b5bd3",
+      "Name": "vdb",
+      "Size": 42949672960,
+      "LogicalSectorSize": 512,
+      "PhysicalSectorSize": 512,
+      "Partitions": [
+        {
+          "Name": "vdb1",
+          "Path": "/dev/vdb1",
+          "Sectors": 83884032,
+          "FilesystemUUID": "7e2d133e-ab24-47c4-8101-f1e526c4b8e7",
+          "PartitionUUID": "355b5bd3-01",
+          "PartitionType": "0x83",
+          "Label": "",
+          "FilesystemType": "ext4",
+          "StartSector": 2048,
+          "EndSector": 83886079,
+          "AlignmentOffset": 0,
+          "Major": 252,
+          "Minor": 17,
+          "Aliases": null
+        }
+      ],
+      "FilesystemType": "",
+      "AlignmentOffset": 0,
+      "Major": 252,
+      "Minor": 16,
+      "Aliases": null,
+      "DeviceMapperSlaves": null,
+      "IsVirtual": false
+    }
+    .... truncated ....
+  ],
+  "os_info": {
+    "platform": "linux",
+    "os_name": "ubuntu",
+    "os_version": "20.04"
+  }
+}
+
+```
