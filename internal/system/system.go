@@ -2,7 +2,9 @@ package system
 
 import (
 	"coriolis-snapshot-agent/internal/storage"
+	"log"
 	"net"
+	"os"
 	"runtime"
 
 	"github.com/pkg/errors"
@@ -34,17 +36,25 @@ type SystemInfo struct {
 	NICs            []NIC                 `json:"network_interfaces"`
 	Disks           []storage.BlockVolume `json:"disks"`
 	OperatingSystem OSInfo                `json:"os_info"`
+	Hostname        string                `json:"hostname"`
 }
 
 func getOSInfo() (OSInfo, error) {
+	var name string
+	var version string
 	osDetails, err := FetchOSDetails()
 	if err != nil {
-		return OSInfo{}, errors.Wrap(err, "fetching OS info")
+		name = ""
+		version = ""
+		log.Printf("failed to get os info: %+v", err)
+	} else {
+		name = osDetails.Name
+		version = osDetails.Version
 	}
 	return OSInfo{
 		Platform:  runtime.GOOS,
-		OSName:    osDetails.Name,
-		OSVersion: osDetails.Version,
+		OSName:    name,
+		OSVersion: version,
 	}, nil
 }
 
@@ -128,11 +138,16 @@ func GetSystemInfo() (SystemInfo, error) {
 	if err != nil {
 		return SystemInfo{}, errors.Wrap(err, "fetching os info")
 	}
+	hostname, err := os.Hostname()
+	if err != nil {
+		return SystemInfo{}, errors.Wrap(err, "fetching hostname")
+	}
 	return SystemInfo{
 		CPUs:            cpuInfo,
 		Disks:           disks,
 		Memory:          *meminfo,
 		NICs:            nics,
 		OperatingSystem: osInfo,
+		Hostname:        hostname,
 	}, nil
 }
