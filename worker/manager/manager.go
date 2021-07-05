@@ -22,6 +22,7 @@ import (
 	"coriolis-snapshot-agent/internal/ioctl"
 	"coriolis-snapshot-agent/internal/storage"
 	"coriolis-snapshot-agent/internal/types"
+	"coriolis-snapshot-agent/internal/util"
 	"coriolis-snapshot-agent/worker/snapstore"
 )
 
@@ -213,7 +214,7 @@ func (m *Snapshot) ListDisks(includeVirtual bool) ([]params.BlockVolume, error) 
 
 	ret := make([]params.BlockVolume, len(devices))
 	for idx, val := range devices {
-		ret[idx] = internalBlockVolumeToParamsBlockVolume(val)
+		ret[idx] = util.InternalBlockVolumeToParamsBlockVolume(val)
 		exists, err := m.db.GetTrackedDisk(val.Major, val.Minor)
 		if err != nil {
 			if !errors.Is(err, bolthold.ErrNotFound) {
@@ -247,7 +248,7 @@ func (m *Snapshot) GetTrackedDisk(diskID string) (params.BlockVolume, error) {
 	if err != nil {
 		return params.BlockVolume{}, errors.Wrap(err, "fetching disk")
 	}
-	ret := internalBlockVolumeToParamsBlockVolume(volume)
+	ret := util.InternalBlockVolumeToParamsBlockVolume(volume)
 	ret.TrackingID = disk.TrackingID
 	return ret, nil
 }
@@ -323,7 +324,7 @@ func (m *Snapshot) AddTrackedDisk(disk params.AddTrackedDiskRequest) (params.Blo
 		dbObject = exists
 	}
 
-	ret := internalBlockVolumeToParamsBlockVolume(volume)
+	ret := util.InternalBlockVolumeToParamsBlockVolume(volume)
 	ret.TrackingID = dbObject.TrackingID
 	return ret, nil
 }

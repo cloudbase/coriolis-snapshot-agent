@@ -1,7 +1,6 @@
 package system
 
 import (
-	"coriolis-snapshot-agent/internal/storage"
 	"log"
 	"net"
 	"os"
@@ -10,6 +9,10 @@ import (
 	"github.com/pkg/errors"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/mem"
+
+	"coriolis-snapshot-agent/apiserver/params"
+	"coriolis-snapshot-agent/internal/storage"
+	"coriolis-snapshot-agent/internal/util"
 )
 
 type CPUInfo struct {
@@ -34,7 +37,7 @@ type SystemInfo struct {
 	Memory          mem.VirtualMemoryStat `json:"memory"`
 	CPUs            CPUInfo               `json:"cpus"`
 	NICs            []NIC                 `json:"network_interfaces"`
-	Disks           []storage.BlockVolume `json:"disks"`
+	Disks           []params.BlockVolume  `json:"disks"`
 	OperatingSystem OSInfo                `json:"os_info"`
 	Hostname        string                `json:"hostname"`
 }
@@ -123,6 +126,10 @@ func GetSystemInfo() (SystemInfo, error) {
 	if err != nil {
 		return SystemInfo{}, errors.Wrap(err, "fetching disk info")
 	}
+	disksParam := make([]params.BlockVolume, len(disks))
+	for idx, val := range disks {
+		disksParam[idx] = util.InternalBlockVolumeToParamsBlockVolume(val)
+	}
 
 	meminfo, err := mem.VirtualMemory()
 	if err != nil {
@@ -144,7 +151,7 @@ func GetSystemInfo() (SystemInfo, error) {
 	}
 	return SystemInfo{
 		CPUs:            cpuInfo,
-		Disks:           disks,
+		Disks:           disksParam,
 		Memory:          *meminfo,
 		NICs:            nics,
 		OperatingSystem: osInfo,
