@@ -50,6 +50,6 @@ port = 9999
 	[api.tls]
 	# x509 settings for this daemon. The agent will validate client
 	# certificates before answering to API requests.
-	certificate = "/etc/coriolis-snapshot-agent/ssl/srv-pub.pem"
-	key = "/etc/coriolis-snapshot-agent/ssl/srv-key.pem"
-	ca_certificate = "/etc/coriolis-snapshot-agent/ssl/ca-pub.pem"
+	certificate = "/etc/coriolis-snapshot-agent/certs/srv-pub.pem"
+	key = "/etc/coriolis-snapshot-agent/certs/srv-key.pem"
+	ca_certificate = "/etc/coriolis-snapshot-agent/certs/ca-pub.pem"

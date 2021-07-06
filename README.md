@@ -243,6 +243,12 @@ Change ownership of folder:
 chown coriolis:disk -R /etc/coriolis-snapshot-agent
 ```
 
+Create the snapshot files destination. The destination needs to be mounted on a separate disk, that will not be snapshotted.
+
+```bash
+mkdir -p /mnt/snapstores/snapstore_files
+```
+
 Enable and start the service:
 
 ```bash
