@@ -1,6 +1,17 @@
 # Path to coriolis snapshot agent log file
 log_file = "/tmp/coriolis-snapshot-agent.log"
 
+# Snap store file size is the size in bytes of the chunks of disk space that will
+# be added to a snap store in the event that a snap store reaches their
+# "empty limit". The empty limit is a threshold set on every created snap store
+# that is equal to the size of this setting, where the agent gets notified that
+# it needs to add more disk space. The disk space it adds is in increments of
+# bytes, dictated by this option. The default value is 2 GB.
+# So for example, if you set this option to 2 GB, if the disk space available
+# to a snap store drops bellow 2 GB, an event is triggered that prompts the agent
+# to add another 2 GB chunk of space to a snap store.
+snap_store_file_size = 2147483648
+
 # snapstore_destinations is an array of paths on disk where the snap
 # store watchers will allocate disk space for the snap stores. The device
 # on which these folders reside, will be excluded from the list of
@@ -26,17 +37,6 @@ device = "vda"
 # location must be one of the locations configured in the snapstore_destinations
 # option above.
 location = "/mnt/snapstores/snapstore_files"
-
-# Snap store file size is the size in bytes of the chunks of disk space that will
-# be added to a snap store in the event that a snap store reaches their
-# "empty limit". The empty limit is a threshold set on every created snap store
-# that is equal to the size of this setting, where the agent gets notified that
-# it needs to add more disk space. The disk space it adds is in increments of
-# bytes, dictated by this option. The default value is 2 GB.
-# So for example, if you set this option to 2 GB, if the disk space available
-# to a snap store drops bellow 2 GB, an event is triggered that prompts the agent
-# to add another 2 GB chunk of space to a snap store.
-snap_store_file_size = 2147483648
 
 [[snapstore_mapping]]
 device = "vdc"
