@@ -11,8 +11,7 @@ import (
 	"github.com/shirou/gopsutil/v3/mem"
 
 	"coriolis-snapshot-agent/apiserver/params"
-	"coriolis-snapshot-agent/internal/storage"
-	"coriolis-snapshot-agent/internal/util"
+	"coriolis-snapshot-agent/worker/manager"
 )
 
 type CPUInfo struct {
@@ -116,19 +115,15 @@ func getNICInfo() ([]NIC, error) {
 	return ret, nil
 }
 
-func GetSystemInfo() (SystemInfo, error) {
+func GetSystemInfo(mgr *manager.Snapshot) (SystemInfo, error) {
 	cpuInfo, err := getCPUInfo()
 	if err != nil {
 		return SystemInfo{}, errors.Wrap(err, "fetching CPU info")
 	}
 
-	disks, err := storage.BlockDeviceList(false, false)
+	disks, err := mgr.ListDisks(false)
 	if err != nil {
 		return SystemInfo{}, errors.Wrap(err, "fetching disk info")
-	}
-	disksParam := make([]params.BlockVolume, len(disks))
-	for idx, val := range disks {
-		disksParam[idx] = util.InternalBlockVolumeToParamsBlockVolume(val)
 	}
 
 	meminfo, err := mem.VirtualMemory()
@@ -151,7 +146,7 @@ func GetSystemInfo() (SystemInfo, error) {
 	}
 	return SystemInfo{
 		CPUs:            cpuInfo,
-		Disks:           disksParam,
+		Disks:           disks,
 		Memory:          *meminfo,
 		NICs:            nics,
 		OperatingSystem: osInfo,

@@ -230,7 +230,7 @@ func (a *APIController) ConsumeSnapshotHandler(w http.ResponseWriter, r *http.Re
 }
 
 func (a *APIController) SystemInfoHandler(w http.ResponseWriter, r *http.Request) {
-	info, err := system.GetSystemInfo()
+	info, err := system.GetSystemInfo(a.mgr)
 	if err != nil {
 		handleError(w, err)
 		return
