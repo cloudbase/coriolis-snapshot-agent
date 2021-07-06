@@ -928,46 +928,68 @@ curl -s -X GET \
   ],
   "disks": [
     {
-      "Path": "/dev/vdb",
-      "PartitionTableType": "dos",
-      "PartitionTableUUID": "355b5bd3",
-      "Name": "vdb",
-      "Size": 42949672960,
-      "LogicalSectorSize": 512,
-      "PhysicalSectorSize": 512,
-      "Partitions": [
+      "path": "/dev/vda",
+      "partition_table_type": "gpt",
+      "partition_table_uuid": "8df09209-6e27-4f0c-a155-ad327bb8f89b",
+      "name": "vda",
+      "size": 26843545600,
+      "logical_sector_size": 512,
+      "physical_sector_size": 512,
+      "partitions": [
         {
-          "Name": "vdb1",
-          "Path": "/dev/vdb1",
-          "Sectors": 83884032,
-          "FilesystemUUID": "7e2d133e-ab24-47c4-8101-f1e526c4b8e7",
-          "PartitionUUID": "355b5bd3-01",
-          "PartitionType": "0x83",
-          "Label": "",
-          "FilesystemType": "ext4",
-          "StartSector": 2048,
-          "EndSector": 83886079,
-          "AlignmentOffset": 0,
-          "Major": 252,
-          "Minor": 17,
-          "Aliases": null
+          "name": "vda1",
+          "path": "/dev/vda1",
+          "sectors": 2048,
+          "partition_uuid": "52296511-3cf6-497c-a96c-2c4b5dd6e540",
+          "partition_type": "21686148-6449-6e6f-744e-656564454649",
+          "start_sector": 2048,
+          "end_sector": 4095,
+          "alignment_offset": 0,
+          "device_major": 252,
+          "device_minor": 1
+        },
+        {
+          "name": "vda2",
+          "path": "/dev/vda2",
+          "sectors": 2097152,
+          "filesystem_uuid": "0f77716b-36b3-4fec-bc41-6855b9e6fbd3",
+          "partition_uuid": "b662da27-fe4d-41a3-99d4-d9173349378d",
+          "partition_type": "0fc63daf-8483-4772-8e79-3d69d8477de4",
+          "filesystem_type": "ext4",
+          "start_sector": 4096,
+          "end_sector": 2101247,
+          "alignment_offset": 0,
+          "device_major": 252,
+          "device_minor": 2
+        },
+        {
+          "name": "vda3",
+          "path": "/dev/vda3",
+          "sectors": 50325504,
+          "filesystem_uuid": "zKQWwb-zJei-IhET-NX3W-lfNC-lF7U-q5Da5D",
+          "partition_uuid": "fad5320e-cf4d-4117-96a9-4b219c9f9065",
+          "partition_type": "0fc63daf-8483-4772-8e79-3d69d8477de4",
+          "filesystem_type": "LVM2_member",
+          "start_sector": 2101248,
+          "end_sector": 52426751,
+          "alignment_offset": 0,
+          "device_major": 252,
+          "device_minor": 3
         }
       ],
-      "FilesystemType": "",
-      "AlignmentOffset": 0,
-      "Major": 252,
-      "Minor": 16,
-      "Aliases": null,
-      "DeviceMapperSlaves": null,
-      "IsVirtual": false
-    }
+      "filesystem_type": "",
+      "alignment_offset": 0,
+      "device_major": 252,
+      "is_virtual": false
+    },
     .... truncated ....
   ],
   "os_info": {
     "platform": "linux",
     "os_name": "ubuntu",
     "os_version": "20.04"
-  }
+  },
+  "hostname": "server01"
 }
 
 ```

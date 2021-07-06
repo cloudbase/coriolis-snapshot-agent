@@ -88,7 +88,7 @@ type Partition struct {
 type BlockVolume struct {
 	// TrackingID is the DB tracking Id added for this disk. A value of -1
 	// means it's not tracked.
-	TrackingID string `json:"id"`
+	TrackingID string `json:"id,omitempty"`
 	// Path is the full path for this disk.
 	Path string `json:"path"`
 	// PartitionTableType is the partition table type
