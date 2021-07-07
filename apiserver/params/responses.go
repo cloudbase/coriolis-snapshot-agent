@@ -174,50 +174,42 @@ type SnapStoreMappingResponse struct {
 	StorageLocationID string `json:"storage_location"`
 }
 
-// type Volume struct {
-// 	Path               string
-// 	DeviceID           types.DevID
-// 	Snapshots          int32
-// 	LastSnapshotNumber int32
-// 	ActiveSnapshots    []VolumeSnapshot
-// }
-
 type SnapshotImage struct {
 	// DevicePath is the snapshot device path in /dev.
-	DevicePath string
-	Major      uint32
-	Minor      uint32
+	DevicePath string `json:"device_path"`
+	Major      uint32 `json:"major"`
+	Minor      uint32 `json:"minor"`
 }
 
 type TrackedDevice struct {
-	TrackingID string
+	TrackingID string `json:"tracking_id"`
 	// DevicePath is the snapshot device path in /dev.
-	DevicePath string
-	Major      uint32
-	Minor      uint32
+	DevicePath string `json:"device_path"`
+	Major      uint32 `json:"major"`
+	Minor      uint32 `json:"minor"`
 }
 
 type VolumeSnapshot struct {
 	// SnapshotNumber is the ID of the snapshot, as saved
 	// in the CBT bitmap.
-	SnapshotNumber uint32
+	SnapshotNumber uint32 `json:"snapshot_number"`
 	// GenerationID is the generation ID of this snapshot.
-	GenerationID string
+	GenerationID string `json:"generation_id"`
 
 	// OriginalDevice is the device that was snapshot.
-	OriginalDevice TrackedDevice
+	OriginalDevice TrackedDevice `json:"original_device"`
 	// SnapshotImage is the resulting image that was created by the snapshot.
-	SnapshotImage SnapshotImage
+	SnapshotImage SnapshotImage `json:"snapshot_image"`
 }
 
 type SnapshotResponse struct {
 	// SnapshotID is the internal ID used to delete the snapshot
 	// once we are done with it.
-	SnapshotID string
+	SnapshotID string `json:"snapshot_id"`
 
 	// VolumeSnapshots is an array of all the disk snapshots that
 	// are included in this snapshot.
-	VolumeSnapshots []VolumeSnapshot
+	VolumeSnapshots []VolumeSnapshot `json:"volume_snapshots"`
 }
 
 type DiskRange struct {
