@@ -14,6 +14,10 @@ import (
 	"coriolis-snapshot-agent/worker/manager"
 )
 
+const (
+	EFI_SYS_PATH = "/sys/firmware/efi"
+)
+
 type CPUInfo struct {
 	PhysicalCores int            `json:"physical_cores"`
 	LogicalCores  int            `json:"logical_cores"`
@@ -39,6 +43,7 @@ type SystemInfo struct {
 	Disks           []params.BlockVolume  `json:"disks"`
 	OperatingSystem OSInfo                `json:"os_info"`
 	Hostname        string                `json:"hostname"`
+	FirmwareType    string                `json:"firmware_type"`
 }
 
 func getOSInfo() (OSInfo, error) {
@@ -144,6 +149,11 @@ func GetSystemInfo(mgr *manager.Snapshot) (SystemInfo, error) {
 	if err != nil {
 		return SystemInfo{}, errors.Wrap(err, "fetching hostname")
 	}
+
+	firmwareType := "bios"
+	if _, err := os.Stat(EFI_SYS_PATH); err == nil {
+		firmwareType = "efi"
+	}
 	return SystemInfo{
 		CPUs:            cpuInfo,
 		Disks:           disks,
@@ -151,5 +161,6 @@ func GetSystemInfo(mgr *manager.Snapshot) (SystemInfo, error) {
 		NICs:            nics,
 		OperatingSystem: osInfo,
 		Hostname:        hostname,
+		FirmwareType:    firmwareType,
 	}, nil
 }
