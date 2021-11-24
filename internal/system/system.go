@@ -1,9 +1,13 @@
 package system
 
 import (
+	"fmt"
+	"io/ioutil"
 	"log"
 	"net"
 	"os"
+	"path"
+	"path/filepath"
 	"runtime"
 
 	"github.com/pkg/errors"
@@ -15,7 +19,9 @@ import (
 )
 
 const (
-	EFI_SYS_PATH = "/sys/firmware/efi"
+	EFI_SYS_PATH   = "/sys/firmware/efi"
+	NET_CLASS_PATH = "/sys/class/net"
+	TUN_IFACE      = 65534
 )
 
 type CPUInfo struct {
@@ -24,10 +30,22 @@ type CPUInfo struct {
 	CPUInfo       []cpu.InfoStat `json:"cpu_info"`
 }
 
-type NIC struct {
-	HWAddress   string   `json:"mac_address"`
-	IPAddresses []string `json:"ip_addresses"`
-	Name        string   `json:"nic_name"`
+type IfaceType string
+
+const (
+	IfaceTypePhysical    IfaceType = "physical_interface"
+	IfaceTypeVirtual     IfaceType = "virtual_interface"
+	IfaceTypeBridge      IfaceType = "bridge_interface"
+	IfaceTypeTun         IfaceType = "tunnel_interface"
+	IfaceTypeUnsupported IfaceType = "unsupported_interface"
+)
+
+type NetworkInterface struct {
+	InterfaceType IfaceType           `json:"interface_type"`
+	Slaves        []*NetworkInterface `json:"slaves,omitempty"`
+	HWAddress     string              `json:"mac_address"`
+	IPAddresses   []string            `json:"ip_addresses"`
+	Name          string              `json:"nic_name"`
 }
 
 type OSInfo struct {
@@ -39,7 +57,7 @@ type OSInfo struct {
 type SystemInfo struct {
 	Memory          mem.VirtualMemoryStat `json:"memory"`
 	CPUs            CPUInfo               `json:"cpus"`
-	NICs            []NIC                 `json:"network_interfaces"`
+	NICs            []NetworkInterface    `json:"network_interfaces"`
 	Disks           []params.BlockVolume  `json:"disks"`
 	OperatingSystem OSInfo                `json:"os_info"`
 	Hostname        string                `json:"hostname"`
@@ -88,17 +106,94 @@ func getCPUInfo() (CPUInfo, error) {
 	}, nil
 }
 
-func getNICInfo() ([]NIC, error) {
+func getInterfaceTypeCode(interfacePath string) (int, error) {
+	var code int
+	typePath := path.Join(interfacePath, "type")
+	file, err := os.Open(typePath)
+	if err != nil {
+		return 0, fmt.Errorf("failed to open path: %s", typePath)
+	}
+	defer file.Close()
+
+	_, err = fmt.Fscanf(file, "%d", &code)
+	if err != nil {
+		return 0, fmt.Errorf("no interface type code found for interface: %s", interfacePath)
+	}
+
+	return code, nil
+}
+
+func getBridgeInterfaceSlaves(bridge NetworkInterface, nicNameMapping map[string]*NetworkInterface) ([]*NetworkInterface, error) {
+	var slaves []*NetworkInterface
+
+	interfacePath := path.Join(NET_CLASS_PATH, bridge.Name)
+	interfaceLinkPath, err := filepath.EvalSymlinks(interfacePath)
+	if err != nil {
+		return []*NetworkInterface{}, errors.Wrap(err, "fetching network interface's symlink")
+	}
+	bridgedInterfacesPath := path.Join(interfaceLinkPath, "brif")
+	pathInfo, err := os.Stat(bridgedInterfacesPath)
+	if err != nil {
+		return []*NetworkInterface{}, errors.Wrap(err, "fetching bridge slaves")
+	}
+	if pathInfo.IsDir() {
+		files, err := ioutil.ReadDir(bridgedInterfacesPath)
+		if err != nil {
+			log.Printf("Could not list directory %v: %+v", bridgedInterfacesPath, err)
+			return []*NetworkInterface{}, errors.Wrap(err, "listing bridge slaves directory")
+		}
+
+		for _, f := range files {
+			slaves = append(slaves, nicNameMapping[f.Name()])
+		}
+		log.Printf("Interfaces linked to bridge %v: %+v\n", bridge.Name, slaves)
+	} else {
+		log.Println(bridgedInterfacesPath, "is not a directory. Skipping")
+		return []*NetworkInterface{}, nil
+	}
+
+	return slaves, nil
+}
+
+func getNICInfo() ([]NetworkInterface, error) {
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		return nil, errors.Wrap(err, "fetching interfaces")
 	}
 
-	ret := []NIC{}
+	nicNameMapping := make(map[string]*NetworkInterface)
+	ret := []NetworkInterface{}
 	for _, val := range ifaces {
 		if val.Flags&net.FlagLoopback != 0 {
+			log.Println("Skipping loopback network interface:", val.Name)
 			continue
 		}
+
+		nic := NetworkInterface{
+			InterfaceType: IfaceTypePhysical,
+			HWAddress:     val.HardwareAddr.String(),
+			Name:          val.Name,
+		}
+
+		interfacePath := path.Join(NET_CLASS_PATH, val.Name)
+		interfaceLinkPath, err := filepath.EvalSymlinks(interfacePath)
+		if err != nil {
+			log.Printf("Could not get network interface's symlink: %+v", err)
+			continue
+		}
+
+		if code, err := getInterfaceTypeCode(interfaceLinkPath); err == nil && code == TUN_IFACE {
+			nic.InterfaceType = IfaceTypeTun
+		} else if _, err = os.Stat(path.Join(interfaceLinkPath, "device")); err == nil {
+			nic.InterfaceType = IfaceTypePhysical
+		} else if _, err = os.Stat(path.Join(interfaceLinkPath, "bridge")); err == nil {
+			nic.InterfaceType = IfaceTypeBridge
+		} else if _, err = os.Stat(path.Join("/sys/devices/virtual/net", val.Name)); err == nil {
+			nic.InterfaceType = IfaceTypeVirtual
+		} else {
+			nic.InterfaceType = IfaceTypeUnsupported
+		}
+
 		addrs, err := val.Addrs()
 		if err != nil {
 			return nil, errors.Wrap(err, "fetching IP addresses")
@@ -108,15 +203,22 @@ func getNICInfo() ([]NIC, error) {
 		for _, addr := range addrs {
 			ifaceAddrs = append(ifaceAddrs, addr.String())
 		}
+		nic.IPAddresses = ifaceAddrs
 
-		nic := NIC{
-			HWAddress:   val.HardwareAddr.String(),
-			Name:        val.Name,
-			IPAddresses: ifaceAddrs,
-		}
-
+		nicNameMapping[nic.Name] = &nic
 		ret = append(ret, nic)
 	}
+
+	for idx, nic := range ret {
+		if nic.InterfaceType == IfaceTypeBridge {
+			slaves, err := getBridgeInterfaceSlaves(nic, nicNameMapping)
+			if err != nil {
+				continue
+			}
+			ret[idx].Slaves = slaves
+		}
+	}
+
 	return ret, nil
 }
 
