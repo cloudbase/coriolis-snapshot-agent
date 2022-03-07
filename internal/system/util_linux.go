@@ -33,6 +33,7 @@ func FetchOSDetails() (OSDetails, error) {
 	if err != nil {
 		return OSDetails{}, errors.Wrap(err, "opening /etc/os-release")
 	}
+	defer fd.Close()
 	scanner := bufio.NewScanner(fd)
 
 	ret := OSDetails{}
