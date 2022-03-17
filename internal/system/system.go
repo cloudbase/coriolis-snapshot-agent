@@ -51,6 +51,7 @@ const (
 	IfaceTypePhysical    IfaceType = "physical_interface"
 	IfaceTypeVirtual     IfaceType = "virtual_interface"
 	IfaceTypeBridge      IfaceType = "bridge_interface"
+	IfaceTypeBond        IfaceType = "bond_interface"
 	IfaceTypeTun         IfaceType = "tunnel_interface"
 	IfaceTypeUnsupported IfaceType = "unsupported_interface"
 )
@@ -203,6 +204,8 @@ func getNICInfo() ([]NetworkInterface, error) {
 			nic.InterfaceType = IfaceTypePhysical
 		} else if _, err = os.Stat(path.Join(interfaceLinkPath, "bridge")); err == nil {
 			nic.InterfaceType = IfaceTypeBridge
+		} else if _, err = os.Stat(path.Join(interfaceLinkPath, "bonding")); err == nil {
+			nic.InterfaceType = IfaceTypeBond
 		} else if _, err = os.Stat(path.Join("/sys/devices/virtual/net", val.Name)); err == nil {
 			nic.InterfaceType = IfaceTypeVirtual
 		} else {
