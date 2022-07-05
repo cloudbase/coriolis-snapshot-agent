@@ -21,7 +21,7 @@ VEEAMSNAP_UDEV_RULE_FILEPATH=/etc/udev/rules.d/99-veeamsnap.rules
 
 usage() {
 cat << EOF
-Usage ./setup.sh -h <CA_HOST> -f <CA_FINGERPRINT> [-phw]
+Usage ./setup.sh -H <CA_HOST> -f <CA_FINGERPRINT> [-phw]
 Install Coriolis Snapshot Agent
 
 -h          Display help
