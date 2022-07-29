@@ -28,12 +28,14 @@ import (
 	"coriolis-snapshot-agent/apiserver/controllers"
 	"coriolis-snapshot-agent/apiserver/routers"
 	"coriolis-snapshot-agent/config"
+	"coriolis-snapshot-agent/scripts"
 	"coriolis-snapshot-agent/util"
 	"coriolis-snapshot-agent/worker/manager"
 )
 
 var (
 	conf    = flag.String("config", config.DefaultConfigFile, "exporter config file")
+	install = flag.Bool("install", false, "runs the installation script")
 	version = flag.Bool("version", false, "prints version")
 )
 
@@ -43,6 +45,11 @@ func main() {
 	flag.Parse()
 	if *version {
 		fmt.Println(Version)
+		return
+	}
+
+	if *install {
+		scripts.RunInstall()
 		return
 	}
 
