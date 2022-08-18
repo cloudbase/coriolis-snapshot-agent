@@ -71,6 +71,9 @@ type Partition struct {
 	// of "1e21670f-01". On GPT partition tables the UUID of the partition table
 	// and that of partitions are proper UUID4, and are unique.
 	PartitionUUID string `json:"partition_uuid,omitempty"`
+	// PartitionSize represents the partition size, computed by multiplying the
+	// partition sectors with the logical sector size of the disk
+	PartitionSize string `json:"partition_size"`
 	// PartitionType represents the partition type. For information about GPT
 	// partition types, consult:
 	// https://en.wikipedia.org/wiki/GUID_Partition_Table#Partition_type_GUIDs

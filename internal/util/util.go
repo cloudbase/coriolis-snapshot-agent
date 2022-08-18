@@ -53,6 +53,10 @@ type FileSystemInfo struct {
 	BytesFree uint64
 }
 
+const (
+	toGB = 1073741824.0
+)
+
 // FindAllInvolvedDevices accepts an array of device ids, and determins whether or
 // not they are part of a device mapper. If they are, all involved devices will be
 // returned as an array of device IDs.
@@ -263,18 +267,19 @@ func InternalBlockVolumeToParamsBlockVolume(volume storage.BlockVolume) params.B
 		IsVirtual:          volume.IsVirtual,
 	}
 	for _, val := range volume.Partitions {
-		ret.Partitions = append(ret.Partitions, InternalPartitionToParamsPartition(val))
+		ret.Partitions = append(ret.Partitions, InternalPartitionToParamsPartition(val, int(volume.LogicalSectorSize)))
 	}
 	return ret
 }
 
-func InternalPartitionToParamsPartition(partition storage.Partition) params.Partition {
+func InternalPartitionToParamsPartition(partition storage.Partition, diskLogicalSectorSize int) params.Partition {
 	return params.Partition{
 		Name:            partition.Name,
 		Path:            partition.Path,
 		Sectors:         partition.Sectors,
 		FilesystemUUID:  partition.FilesystemUUID,
 		PartitionUUID:   partition.PartitionUUID,
+		PartitionSize:   fmt.Sprintf("%.2f", getPartitionSizeGB(partition.Sectors, diskLogicalSectorSize)),
 		PartitionType:   partition.PartitionType,
 		Label:           partition.Label,
 		FilesystemType:  partition.FilesystemType,
@@ -284,4 +289,8 @@ func InternalPartitionToParamsPartition(partition storage.Partition) params.Part
 		Major:           partition.Major,
 		Minor:           partition.Minor,
 	}
+}
+
+func getPartitionSizeGB(sectors int, sectorSize int) float64 {
+	return float64(sectors * sectorSize) / toGB
 }
