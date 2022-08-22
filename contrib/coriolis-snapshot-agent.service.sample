@@ -1,18 +1,1 @@
-[Unit]
-Description=Coriolis snapshot agent
-After=multi-user.target
-
-[Service]
-Type=simple
-RuntimeDirectory=coriolis-snapshot-agent
-ExecStart=/usr/local/bin/coriolis-snapshot-agent -config /etc/coriolis-snapshot-agent/config.toml
-Restart=always
-RestartSec=5s
-# Change this to the user you want the coriolis snapshot agent
-# daemon to run under. Note, the user must be part of the disk
-# group.
-User=coriolis
-Group=disk
-
-[Install]
-WantedBy=multi-user.target
+../scripts/setup/coriolis-snapshot-agent.service.sample

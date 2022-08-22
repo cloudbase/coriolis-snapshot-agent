@@ -34,6 +34,8 @@ Install Coriolis Snapshot Agent
 
 -w          Custom Web Root Directory Path. Defaults to '/var/www/html'.
             Only set this in case you install alongside a running web server.
+
+-e          Current path of the coriolis-snapshot-agent executable
 EOF
 }
 
@@ -60,12 +62,15 @@ build_veeamsnap() {
     touch $VEEAMSNAP_UDEV_RULE_FILEPATH
     echo 'KERNEL=="veeamsnap", OWNER="root", GROUP="disk"' > $VEEAMSNAP_UDEV_RULE_FILEPATH
     modprobe veeamsnap
+    chgrp disk /dev/veeamsnap
     popd
 }
 
 copy_agent_binary() {
     mkdir -p $(dirname "$DEFAULT_BINARY_PATH")
-    cp $BASE_DIR/coriolis-snapshot-agent $DEFAULT_BINARY_PATH
+    if [ "$1" != "$DEFAUL_BINARY_PATH" ]; then
+        cp $1 $DEFAULT_BINARY_PATH
+    fi
 }
 
 make_dirs() {
@@ -136,8 +141,11 @@ generate_certificates() {
     step ca bootstrap -f --ca-url https://$1:$2 --fingerprint $3
 
     FLAG_ARGS="-f --provisioner=acme"
+    if [ "$#" -eq "4" ]; then
+        FLAG_ARGS="$FLAG_ARGS --webroot=$4"
+    fi
     POS_ARGS="$BIND_ADDRESS $CERTS_DIR/srv-pub.pem $CERTS_DIR/srv-key.pem"
-    step ca certificate $FLAG_ARGS --webroot=$4 $POS_ARGS || step ca certificate $FLAG_ARGS $POS_ARGS
+    step ca certificate $FLAG_ARGS $POS_ARGS
 
     step ca root -f $CERTS_DIR/ca-pub.pem
 }
@@ -161,7 +169,7 @@ unset -v CA_FINGERPRINT
 unset -v CA_PORT
 unset -v WEB_ROOT
 
-while getopts ":hH:f:p:w:" OPT; do
+while getopts ":hH:f:p:w:e:" OPT; do
     case "$OPT" in
         h)
             usage
@@ -171,6 +179,7 @@ while getopts ":hH:f:p:w:" OPT; do
         f) CA_FINGERPRINT=$OPTARG ;;
         p) CA_PORT=$OPTARG ;;
         w) WEB_ROOT=$OPTARG ;;
+        e) EXEC_PATH=$OPTARG ;;
         *)
             usage
             exit 1
@@ -178,9 +187,12 @@ while getopts ":hH:f:p:w:" OPT; do
     esac
 done
 
-if [ -z "$CA_HOST" ] || [ -z "$CA_FINGERPRINT" ]; then
-    echo "Missing -H or -f option"
-    exit 1
+if [ -z "$CA_HOST" ]; then
+    read -p "Pass Hostname of the Step CA server (usually corresponds with the Coriolis appliance's hostname or address): " CA_HOST
+fi
+
+if [ -z "$CA_FINGERPRINT" ]; then
+    read -p "Pass Step CA fingerprint (usually copied from the Coriolis WebUI, 'Coriolis Bare Metal Servers' tab): " CA_FINGERPRINT
 fi
 
 if [ -z "$CA_PORT" ]; then
@@ -188,7 +200,12 @@ if [ -z "$CA_PORT" ]; then
 fi
 
 if [ -z "$WEB_ROOT" ]; then
-    WEB_ROOT=/var/www/html
+    read -p "Is this machine a web server host? [y/n] " CONFIRMATION
+    if [ "$CONFIRMATION" = "y" ]; then
+        echo "In case this machine is a web server host, SSL certificate generation will require the web server's root, used to host ACME requests."
+        read -p "Please provide the web server's root path [defaults to /var/www/html]: " WEB_ROOT
+        WEB_ROOT=${WEB_ROOT:-"/var/www/html"}
+    fi
 fi
 
 install_prereqs
@@ -196,7 +213,7 @@ if ! [[ -f $VEEAMSNAP_MODULE_PATH ]] ; then
     build_veeamsnap
 fi
 
-copy_agent_binary
+copy_agent_binary $EXEC_PATH
 make_dirs
 render_config_file
 generate_certificates $CA_HOST $CA_PORT $CA_FINGERPRINT $WEB_ROOT
