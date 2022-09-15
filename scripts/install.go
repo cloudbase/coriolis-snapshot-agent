@@ -62,7 +62,7 @@ func RunInstall() {
 	scriptDir := filepath.Dir(scriptPath)
 	scriptCmd := fmt.Sprintf("%s %s %s", scriptPath, "-e", execPath)
 
-	cmd := exec.Command("sudo", "-E", "/bin/bash", "-c", scriptCmd)
+	cmd := exec.Command("/bin/bash", "-c", scriptCmd)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

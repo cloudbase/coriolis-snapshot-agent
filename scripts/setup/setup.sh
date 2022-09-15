@@ -13,7 +13,7 @@ MODULES_PATH=/etc/modules
 PREREQS="gcc git make tar wget"
 
 STEP_VERSION="0.19.0"
-STEP_CLI_URL=https://dl.step.sm/gh-release/cli/docs-ca-install/v$STEP_VERSION/step_linux_${STEP_VERSION}_amd64.tar.gz
+STEP_CLI_URL=https://github.com/smallstep/cli/releases/download/v${STEP_VERSION}/step_linux_${STEP_VERSION}_amd64.tar.gz
 
 VEEAMSNAP_MODULE_PATH=/lib/modules/$(uname -r)/kernel/drivers/veeam/veeamsnap.ko
 VEEAMSNAP_REPO_URL=https://github.com/veeam/veeamsnap
@@ -40,7 +40,7 @@ EOF
 }
 
 install_step_cli() {
-    wget -O /tmp/step.tar.gz $STEP_CLI_URL
+    wget -O /tmp/step.tar.gz $STEP_CLI_URL || wget -O /tmp/step.tar.gz $STEP_CLI_URL --no-check-certificate
     tar -xf /tmp/step.tar.gz -C /tmp
     cp /tmp/step_$STEP_VERSION/bin/step /usr/bin
 }
