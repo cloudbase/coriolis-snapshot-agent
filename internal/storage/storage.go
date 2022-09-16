@@ -423,6 +423,17 @@ func isValidDevice(name string) error {
 		}
 	}
 
+	// Check if removable disk (i.e. floppy disk)
+	removable := path.Join(sysfsPath, name, "removable")
+	if _, err := os.Stat(removable); err == nil {
+		removableValue, err := returnContentsAsInt(removable)
+		if err == nil {
+			if removableValue != 0 {
+				return fmt.Errorf("%s is a removable disk", name)
+			}
+		}
+	}
+
 	return nil
 }
 

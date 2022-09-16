@@ -127,8 +127,16 @@ render_config_file() {
     CONFIG_FILE_PATH=$DEFAULT_CONFIG_DIR/config.toml
     cat $BASE_DIR/config-template.toml | envsubst > $CONFIG_FILE_PATH
     for DISK_NAME in $DISK_DEVICE_NAMES; do
+        # filter out disk set as snapstore
         if [ "/dev/$DISK_NAME" = "$SNAPSTORE_DISK" ]; then
             continue
+        fi
+
+        # filter out removable disks (i.e. floppy disks)
+        if [ -f "/sys/block/$DISK_NAME/removable" ]; then
+            if [ "$(cat /sys/block/$DISK_NAME/removable)" != "0" ]; then
+                continue
+            fi
         fi
 
         echo "[[snapstore_mapping]]" >> $CONFIG_FILE_PATH
