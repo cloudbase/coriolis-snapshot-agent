@@ -9,11 +9,11 @@ DEFAULT_CONFIG_DIR=/etc/coriolis-snapshot-agent
 DEFAULT_SNAPSTORE_LOCATION=/mnt/snapstores/snapstore_files
 CERTS_DIR=$DEFAULT_CONFIG_DIR/certs
 
-MODULES_PATH=/etc/modules
-PREREQS="gcc git make tar wget"
+MODULES_PATH=/etc/modules-load.d/veeamsnap.conf
+PREREQS="e2fsprogs gcc git make tar wget"
 
 STEP_VERSION="0.19.0"
-STEP_CLI_URL=https://dl.step.sm/gh-release/cli/docs-ca-install/v$STEP_VERSION/step_linux_${STEP_VERSION}_amd64.tar.gz
+STEP_CLI_URL=https://github.com/smallstep/cli/releases/download/v${STEP_VERSION}/step_linux_${STEP_VERSION}_amd64.tar.gz
 
 VEEAMSNAP_MODULE_PATH=/lib/modules/$(uname -r)/kernel/drivers/veeam/veeamsnap.ko
 VEEAMSNAP_REPO_URL=https://github.com/veeam/veeamsnap
@@ -40,14 +40,22 @@ EOF
 }
 
 install_step_cli() {
-    wget -O /tmp/step.tar.gz $STEP_CLI_URL
+    wget -O /tmp/step.tar.gz $STEP_CLI_URL || wget -O /tmp/step.tar.gz $STEP_CLI_URL --no-check-certificate
     tar -xf /tmp/step.tar.gz -C /tmp
     cp /tmp/step_$STEP_VERSION/bin/step /usr/bin
 }
 
+install_prereqs_suse() {
+    KERNEL_TYPE=$(uname -r | cut -f 3 -d -)
+    KERNEL_VERSION=$(uname -r | cut -f 1,2 -d -)
+    VERSION=$(zypper search -si kernel-$KERNEL_TYPE | grep $KERNEL_VERSION | awk '{print $7}')
+    zypper install -y $PREREQS gcc11 gettext-tools iproute2 kernel-$KERNEL_TYPE-devel-$VERSION
+}
+
 install_prereqs() {
-    apt-get update || true
-    apt-get install -y $PREREQS gettext-base iproute2 linux-headers-$(uname -r) || yum install -y $PREREQS gettext iproute kernel-devel-$(uname -r)
+    apt-get update && apt-get install -y $PREREQS gettext-base iproute2 linux-headers-$(uname -r) || true
+    yum install -y $PREREQS gettext iproute kernel-devel-$(uname -r) || true
+    install_prereqs_suse || true
     install_step_cli
 }
 
@@ -58,7 +66,7 @@ build_veeamsnap() {
     # make
     make install
 
-    echo veeamsnap >> $MODULES_PATH
+    echo veeamsnap > $MODULES_PATH
     touch $VEEAMSNAP_UDEV_RULE_FILEPATH
     echo 'KERNEL=="veeamsnap", OWNER="root", GROUP="disk"' > $VEEAMSNAP_UDEV_RULE_FILEPATH
     modprobe veeamsnap
@@ -113,13 +121,14 @@ render_config_file() {
             echo "Snapstore disk already mounted."
             break
         else
-            mount $SNAPSTORE_DISK $DEFAULT_SNAPSTORE_LOCATION
-            if grep -q $SNAPSTORE_DISK /proc/mounts; then
-                echo "Snapstore disk mounted successfully"
+            SNAPSTORE_DISK_UUID=$(blkid $SNAPSTORE_DISK -o export | grep UUID)
+            if grep -q $SNAPSTORE_DISK_UUID /etc/fstab; then
+                echo "Snapstore disk already in fstab"
             else
-                echo "WARN: Could not mount disk $SNAPSTORE_DISK"
-                continue
+                echo "Adding snapstore disk to /etc/fstab"
+                echo "$SNAPSTORE_DISK_UUID $DEFAULT_SNAPSTORE_LOCATION ext4 defaults,nofail 0 0" >> /etc/fstab
             fi
+            mount -a || true
             break
         fi
     done
