@@ -24,7 +24,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
@@ -47,7 +46,7 @@ var (
 	SnapStoreEvent NotificationType = "snapStoreCreate"
 )
 
-func NewManager(ctx context.Context, cfg *config.Config) (manager *Snapshot, err error) {
+func NewManager(ctx context.Context, cfg *config.Config, udevMonitor *storage.UdevMonitor) (manager *Snapshot, err error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
@@ -73,6 +72,7 @@ func NewManager(ctx context.Context, cfg *config.Config) (manager *Snapshot, err
 		notifyChannels:                   map[NotificationType][]chan interface{}{},
 		snapStoreCharacterDeviceWatchers: map[string]*snapstore.CharacterDeviceWatcher{},
 		msgChan:                          make(chan interface{}, 50),
+		udevMonitor:                      udevMonitor,
 	}
 	if dbNeedsInit {
 		defer func() {
@@ -120,8 +120,9 @@ type Snapshot struct {
 	watcherMessagesQuit chan struct{}
 	ctx                 context.Context
 
-	mux    sync.Mutex
-	regMux sync.Mutex
+	mux         sync.Mutex
+	regMux      sync.Mutex
+	udevMonitor *storage.UdevMonitor
 }
 
 func (m *Snapshot) RecordWatcher(snapstoreID string, watcher *snapstore.CharacterDeviceWatcher) {
@@ -615,29 +616,21 @@ func (m *Snapshot) CreateSnapshot(param params.CreateSnapshotRequest) (params.Sn
 			return params.SnapshotResponse{}, errors.Errorf("expected to find 1 new image, found %d", len(images))
 		}
 
-		var devFromID string
-		attempts := 0
-		var imgErr error
-		for {
-			// We can listen to netlink instead of polling a few times, but this will do for now.
-			// TODO (gsamfira): replace this with udev listener.
-			if attempts >= 5 {
-				return params.SnapshotResponse{}, errors.Errorf("failed to find image device by ID %d:%d %+v", images[0].SnapshotDevID.Major, images[0].SnapshotDevID.Minor, imgErr)
-			}
-			devFromID, imgErr = storage.FindDeviceByID(images[0].SnapshotDevID.Major, images[0].SnapshotDevID.Minor)
-			if imgErr != nil {
-				attempts++
-				time.Sleep(1 * time.Second)
-				continue
-			}
-			break
+		imageMajor := images[0].SnapshotDevID.Major
+		imageMinor := images[0].SnapshotDevID.Minor
+		devFromID, err := m.udevMonitor.GetUdevDevice(int(imageMajor), int(imageMinor))
+		if err != nil {
+			return params.SnapshotResponse{}, errors.Errorf("failed to udev detect image device by ID (%d:%d): %+v", imageMajor, imageMinor, err)
+		}
+		if devFromID.DeviceStatus != storage.DeviceStatusActive {
+			log.Printf("WARNING! Status of device with ID %d:%d is not %s. Actual device status: %s\n", imageMajor, imageMinor, storage.DeviceStatusActive, devFromID.DeviceStatus)
 		}
 
 		// Record resources in the database
 		snapImageID := uuid.New()
 		newSnapImage := db.SnapshotImage{
 			TrackingID: snapImageID.String(),
-			DevicePath: devFromID,
+			DevicePath: devFromID.DeviceNode,
 			Major:      images[0].SnapshotDevID.Major,
 			Minor:      images[0].SnapshotDevID.Minor,
 		}
