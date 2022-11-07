@@ -10,13 +10,23 @@ DEFAULT_SNAPSTORE_LOCATION=/mnt/snapstores/snapstore_files
 CERTS_DIR=$DEFAULT_CONFIG_DIR/certs
 
 MODULES_PATH=/etc/modules-load.d/veeamsnap.conf
-PREREQS="e2fsprogs gcc git make tar wget"
+PREREQS="gcc git make tar util-linux wget"
+
+SNAPSTORE_WARNING=$(cat <<EOP
+WARNING: The snapstore disk is not mounted.
+
+Coriolis Snapshot Agent requires an extra disk device attached to this server, where it could store the created snapshots.
+This mounted disk device is called a snapstore location.
+The extra disk device can be a physical disk, a removable disk or an iSCSI attached disk.
+Please make sure the server has such a disk device attached and mounted to $DEFAULT_SNAPSTORE_LOCATION, and rerun the installation process.
+EOP
+)
 
 STEP_VERSION="0.19.0"
 STEP_CLI_URL=https://github.com/smallstep/cli/releases/download/v${STEP_VERSION}/step_linux_${STEP_VERSION}_amd64.tar.gz
 
 VEEAMSNAP_MODULE_PATH=/lib/modules/$(uname -r)/kernel/drivers/veeam/veeamsnap.ko
-VEEAMSNAP_REPO_URL=https://github.com/veeam/veeamsnap
+VEEAMSNAP_REPO_URL=https://github.com/cloudbase/veeamsnap
 VEEAMSNAP_UDEV_RULE_FILEPATH=/etc/udev/rules.d/99-veeamsnap.rules
 
 usage() {
@@ -35,7 +45,7 @@ Install Coriolis Snapshot Agent
 -w          Custom Web Root Directory Path. Defaults to '/var/www/html'.
             Only set this in case you install alongside a running web server.
 
--e          Current path of the coriolis-snapshot-agent executable
+-e          Current path to the coriolis-snapshot-agent executable
 EOF
 }
 
@@ -60,18 +70,18 @@ install_prereqs() {
 }
 
 build_veeamsnap() {
-    pushd /tmp
     git clone $VEEAMSNAP_REPO_URL
-    cd /tmp/veeamsnap/source
+    cd ./veeamsnap/source
     # make
     make install
+}
 
-    echo veeamsnap > $MODULES_PATH
+setup_veeamsnap() {
+    grep -q veeamsnap $MODULES_PATH || echo veeamsnap > $MODULES_PATH
     touch $VEEAMSNAP_UDEV_RULE_FILEPATH
     echo 'KERNEL=="veeamsnap", OWNER="root", GROUP="disk"' > $VEEAMSNAP_UDEV_RULE_FILEPATH
     modprobe veeamsnap
     chgrp disk /dev/veeamsnap
-    popd
 }
 
 copy_agent_binary() {
@@ -81,12 +91,8 @@ copy_agent_binary() {
     fi
 }
 
-make_dirs() {
-    mkdir -p $CERTS_DIR
-    mkdir -p $DEFAULT_SNAPSTORE_LOCATION
-}
-
 render_config_file() {
+    mkdir -p $DEFAULT_CONFIG_DIR
     DEFAULT_IP=$(ip -o route get 1 | sed -n 's/.*src \([0-9.]\+\).*/\1/p')
     echo "Which IP address should the snapshot agent service bind to?"
     read -p "[defaults to $DEFAULT_IP]: " BIND_ADDRESS
@@ -98,42 +104,18 @@ render_config_file() {
     PORT=${PORT:-9999}
     export PORT
 
-    while : ; do
-        echo "The snapshots created by the agent are saved in a snapstore location."
-        echo "The snapstore location is the mount path of a separate empty block volume (physical, iSCSI, rbd, etc)."
-        DISKS_LIST=$(lsblk -o NAME,SIZE,TYPE | grep -e 'disk$')
-        echo "$DISKS_LIST" | awk '{print $1 "\t\t" $2}'
-        DISK_DEVICE_NAMES=$(echo "$DISKS_LIST" | awk '{print $1}')
-        echo
-        read -p "Which disk will be used as snapstore? " SNAPSTORE_DISK
-        if ! echo $DISK_DEVICE_NAMES | grep -q $SNAPSTORE_DISK; then
-            echo "Selected disk does not exist: $SNAPSTORE_DISK"
-            continue
-        fi
-        SNAPSTORE_DISK=/dev/$SNAPSTORE_DISK
-        read -p "Do you wish to format the snapstore disk? (y/n) " SNAPSTORE_CONFIRMATION
-        if [ "$SNAPSTORE_CONFIRMATION" = "y" ]; then
-            umount $SNAPSTORE_DISK || true
-            mkfs.ext4 $SNAPSTORE_DISK
-        fi
-
-        if grep -q $SNAPSTORE_DISK /proc/mounts; then
-            echo "Snapstore disk already mounted."
-            break
-        else
-            SNAPSTORE_DISK_UUID=$(blkid $SNAPSTORE_DISK -o export | grep UUID)
-            if grep -q $SNAPSTORE_DISK_UUID /etc/fstab; then
-                echo "Snapstore disk already in fstab"
-            else
-                echo "Adding snapstore disk to /etc/fstab"
-                echo "$SNAPSTORE_DISK_UUID $DEFAULT_SNAPSTORE_LOCATION ext4 defaults,nofail 0 0" >> /etc/fstab
-            fi
-            mount -a || true
-            break
-        fi
-    done
+    SNAPSTORE_DEVICE_UUID=$(blkid $SNAPSTORE_DEVICE -o export | grep ^UUID=)
+    SNAPSTORE_DEVICE_PART_TYPE=$(blkid $SNAPSTORE_DEVICE -o value -s TYPE)
+    if grep -q $SNAPSTORE_DEVICE_UUID /etc/fstab; then
+        echo "Snapstore device already in fstab"
+    else
+        echo "Adding snapstore device to /etc/fstab"
+        echo "$SNAPSTORE_DEVICE_UUID $DEFAULT_SNAPSTORE_LOCATION $SNAPSTORE_DEVICE_PART_TYPE defaults,nofail 0 0" >> /etc/fstab
+    fi
 
     CONFIG_FILE_PATH=$DEFAULT_CONFIG_DIR/config.toml
+    DISK_DEVICE_NAMES=$(lsblk -o NAME,SIZE,TYPE | grep -e 'disk$' | awk '{print $1}')
+    SNAPSTORE_DISK=$(lsblk -dno pkname $SNAPSTORE_DEVICE)
     cat $BASE_DIR/config-template.toml | envsubst > $CONFIG_FILE_PATH
     for DISK_NAME in $DISK_DEVICE_NAMES; do
         # filter out disk set as snapstore
@@ -155,6 +137,7 @@ render_config_file() {
 }
 
 generate_certificates() {
+    mkdir -p $CERTS_DIR
     step ca bootstrap -f --ca-url https://$1:$2 --fingerprint $3
 
     FLAG_ARGS="-f --provisioner=acme"
@@ -179,12 +162,26 @@ setup_service() {
 
     systemctl daemon-reload
     systemctl enable --now coriolis-snapshot-agent.service
+    systemctl status coriolis-snapshot-agent.service
 }
+
+if [ "$EUID" -ne 0 ]; then
+    echo "Installation script must be run with root privileges."
+    exit 1
+fi
+
+SNAPSTORE_DEVICE=$(grep $DEFAULT_SNAPSTORE_LOCATION /proc/mounts | head -1 | awk '{print $1}')
+if [ -z "$SNAPSTORE_DEVICE" ]; then
+    echo "$SNAPSTORE_WARNING"
+    exit 1
+fi
+echo "Identified snapstore device: $SNAPSTORE_DEVICE"
 
 unset -v CA_HOST
 unset -v CA_FINGERPRINT
 unset -v CA_PORT
 unset -v WEB_ROOT
+unset -v EXEC_PATH
 
 while getopts ":hH:f:p:w:e:" OPT; do
     case "$OPT" in
@@ -212,6 +209,10 @@ if [ -z "$CA_FINGERPRINT" ]; then
     read -p "Pass Step CA fingerprint (usually copied from the Coriolis WebUI, 'Coriolis Bare Metal Servers' tab): " CA_FINGERPRINT
 fi
 
+if [ -z "$EXEC_PATH" ]; then
+    EXEC_PATH="$BASE_DIR/coriolis-snapshot-agent"
+fi
+
 if [ -z "$CA_PORT" ]; then
     CA_PORT=9000
 fi
@@ -227,11 +228,15 @@ fi
 
 install_prereqs
 if ! [[ -f $VEEAMSNAP_MODULE_PATH ]] ; then
+    CLONEDIR=$(mktemp -d)
+    pushd $CLONEDIR
     build_veeamsnap
+    popd
+    rm -r $CLONEDIR
 fi
+setup_veeamsnap
 
 copy_agent_binary $EXEC_PATH
-make_dirs
 render_config_file
 generate_certificates $CA_HOST $CA_PORT $CA_FINGERPRINT $WEB_ROOT
 setup_service
