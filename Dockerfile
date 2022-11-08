@@ -2,7 +2,7 @@ FROM golang:alpine
 
 WORKDIR /root
 
-RUN apk add musl-dev gcc libtool m4 autoconf g++ make libblkid util-linux-dev git linux-headers
+RUN apk add musl-dev gcc libtool m4 autoconf g++ make libblkid util-linux-dev git linux-headers eudev-dev
 
 RUN git clone https://github.com/veeam/veeamsnap /tmp/veeamsnap
 RUN mkdir -p /usr/src/

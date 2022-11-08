@@ -28,6 +28,7 @@ import (
 	"coriolis-snapshot-agent/apiserver/controllers"
 	"coriolis-snapshot-agent/apiserver/routers"
 	"coriolis-snapshot-agent/config"
+	"coriolis-snapshot-agent/internal/storage"
 	"coriolis-snapshot-agent/scripts"
 	"coriolis-snapshot-agent/util"
 	"coriolis-snapshot-agent/worker/manager"
@@ -70,7 +71,11 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	mgr, err := manager.NewManager(ctx, cfg)
+	udevMonitor := storage.NewUdevMonitor(ctx, cancel)
+	go udevMonitor.Start()
+	defer udevMonitor.Stop()
+
+	mgr, err := manager.NewManager(ctx, cfg, udevMonitor)
 	if err != nil {
 		log.Fatalf("failed to create manager: %q", err)
 	}
