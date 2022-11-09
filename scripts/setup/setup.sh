@@ -119,7 +119,7 @@ render_config_file() {
     cat $BASE_DIR/config-template.toml | envsubst > $CONFIG_FILE_PATH
     for DISK_NAME in $DISK_DEVICE_NAMES; do
         # filter out disk set as snapstore
-        if [ "/dev/$DISK_NAME" = "$SNAPSTORE_DISK" ]; then
+        if [ "$DISK_NAME" = "$SNAPSTORE_DISK" ]; then
             continue
         fi
 
