@@ -6,6 +6,7 @@ DEFAULT_AGENT_SERVICE_PATH=/etc/systemd/system/coriolis-snapshot-agent.service
 DEFAULT_AGENT_USERNAME=coriolis
 DEFAULT_BINARY_PATH=/usr/local/bin/coriolis-snapshot-agent
 DEFAULT_CONFIG_DIR=/etc/coriolis-snapshot-agent
+DEFAULT_LOG_DIR=/var/log/coriolis
 DEFAULT_SNAPSTORE_LOCATION=/mnt/snapstores/snapstore_files
 CERTS_DIR=$DEFAULT_CONFIG_DIR/certs
 
@@ -93,6 +94,8 @@ copy_agent_binary() {
 
 render_config_file() {
     mkdir -p $DEFAULT_CONFIG_DIR
+    mkdir -p $DEFAULT_LOG_DIR
+    export DEFAULT_LOG_DIR
     DEFAULT_IP=$(ip -o route get 1 | sed -n 's/.*src \([0-9.]\+\).*/\1/p')
     echo "Which IP address should the snapshot agent service bind to?"
     read -p "[defaults to $DEFAULT_IP]: " BIND_ADDRESS
@@ -154,6 +157,7 @@ setup_service() {
     useradd --system --home-dir=/nonexisting --group disk --no-create-home --shell /bin/false $DEFAULT_AGENT_USERNAME
 
     chown $DEFAULT_AGENT_USERNAME:disk -R $DEFAULT_CONFIG_DIR
+    chown $DEFAULT_AGENT_USERNAME:disk -R $DEFAULT_LOG_DIR
     chown $DEFAULT_AGENT_USERNAME:disk -R $DEFAULT_SNAPSTORE_LOCATION
     # Render service unit file
         #TODO: check if systemd or init
