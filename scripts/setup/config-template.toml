@@ -1,5 +1,5 @@
 # Path to coriolis snapshot agent log file
-log_file = "/tmp/coriolis-snapshot-agent.log"
+log_file = "${DEFAULT_LOG_DIR}/coriolis-snapshot-agent.log"
 
 # Snap store file size is the size in bytes of the chunks of disk space that will
 # be added to a snap store in the event that a snap store reaches their
