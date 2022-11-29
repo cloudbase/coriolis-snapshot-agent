@@ -61,11 +61,19 @@ int get_values(struct cbt_info_s *vals, int idx, unsigned int size, struct cbt_i
 
 	return 0;
 }
+
+struct ioctl_set_kernel_entries_s setKernelEntries(struct ioctl_set_kernel_entries_s* kernel_entries, struct kernel_entry_s* entries, struct kernel_entry_s req_module, struct kernel_entry_s unres_entry) {
+	entries[0] = req_module;
+	entries[1] = unres_entry;
+	kernel_entries->entries = entries;
+}
 */
 import "C"
 
 import (
+	"bufio"
 	"fmt"
+	"log"
 	"os"
 	"syscall"
 	"unsafe"
@@ -159,6 +167,108 @@ func GetCBTInfo() ([]types.CBTInfo, error) {
 	}
 
 	return cbtInfoRet, nil
+}
+
+func getKernelEntryAddress(name string) (uint64, error) {
+	var address uint64
+	f, err := os.Open("/proc/kallsyms")
+	if err != nil {
+		return address, errors.Wrap(err, "reading kernel symbols file")
+	}
+
+	var tempAddr uint64
+	var tempName string
+	fs := bufio.NewScanner(f)
+	fs.Split(bufio.ScanLines)
+	for fs.Scan() {
+		_, err := fmt.Sscanf(fs.Text(), "%x T %s", &tempAddr, &tempName)
+		if err != nil {
+			continue
+		}
+		if name == tempName {
+			address = tempAddr
+			break
+		}
+	}
+	if address == 0 {
+		return address, fmt.Errorf("kernel symbol address not found in /proc/kallsyms for entry: %s", name)
+	}
+
+	return address, nil
+}
+
+// SetMissingKernelEntries checks whether additional kernel entries need setting before doing any IOCTL calls.
+// If this operation is not executed, some kernel versions might throw a "function not implemented" error, indicating
+// that a kernel entry is not initialized. Running this using a non-root user should fail, unless setting CAP_SYSLOG
+// cap to the binary. This is due to the fact that non-root users are not allowed to read kernel entry addresses from
+// /proc/kallsyms, for security reasons. To set the CAP_SYSLOG to the binary run:
+// 		sudo setcap 'CAP_SYSLOG+ep' coriolis-snapshot-agent
+func SetMissingKernelEntries() error {
+	dev, err := os.OpenFile(VEEAM_DEV, os.O_RDWR, 0600)
+	if err != nil {
+		return errors.Wrap(err, "opening veeamsnap")
+	}
+	defer dev.Close()
+
+	var unresolvedEntryName string
+	var buffer [4096]C.char
+	unresolvedEntries := C.struct_ioctl_get_unresolved_kernel_entries_s{
+		buf: buffer,
+	}
+	r1, _, errno := syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), IOCTL_GET_UNRESOLVED_KERNEL_ENTRIES, uintptr(unsafe.Pointer(&unresolvedEntries)))
+	if int(errno) != 0 {
+		return errors.Wrap(errno, "getting unresolved kernel entries")
+	}
+	if r1 == 0 {
+		log.Println("No unresolved kernel entries found!")
+		return nil
+	}
+
+	// NOTE: The IOCTL_GET_UNRESOLVED_KERNEL_ENTRIES call only saves one kernel entry in the return buffer, no need for word separation.
+	unresolvedEntryName = C.GoString(&unresolvedEntries.buf[0])
+	log.Printf("Found unresolved kernel entry: %s\n", unresolvedEntryName)
+
+	// Before adding any kernel entry, we need to also send "__request_module" entry as init entry
+	reqModuleEntryAddress, err := getKernelEntryAddress(KERNEL_ENTRY_BASE_NAME)
+	if err != nil {
+		return errors.Wrap(err, "getting request module kernel entry address")
+	}
+	reqModuleEntryNameC := C.CString(KERNEL_ENTRY_BASE_NAME)
+	defer C.free(unsafe.Pointer(reqModuleEntryNameC))
+	reqModuleEntry := C.struct_kernel_entry_s{
+		addr: C.ulonglong(reqModuleEntryAddress),
+		name: reqModuleEntryNameC,
+	}
+
+	// Add the actual missing kernel entry
+	unresolvedEntryAddress, err := getKernelEntryAddress(unresolvedEntryName)
+	if err != nil {
+		return errors.Wrap(err, "getting missing kernel entry address")
+	}
+
+	unresolvedEntry := C.struct_kernel_entry_s{
+		addr: C.ulonglong(unresolvedEntryAddress),
+		name: &unresolvedEntries.buf[0],
+	}
+
+	entriesCount := 2
+	size := C.ulong(C.sizeof_struct_kernel_entry_s * entriesCount)
+	entries := C.malloc(size)
+	defer C.free(unsafe.Pointer(entries))
+
+	var kEntries *C.struct_kernel_entry_s = (*C.struct_kernel_entry_s)(entries)
+	kernelEntries := C.struct_ioctl_set_kernel_entries_s{
+		count: C.uint(entriesCount),
+	}
+
+	C.setKernelEntries(&kernelEntries, kEntries, reqModuleEntry, unresolvedEntry)
+
+	r1, _, err = syscall.Syscall(syscall.SYS_IOCTL, dev.Fd(), IOCTL_SET_KERNEL_ENTRIES, uintptr(unsafe.Pointer(&kernelEntries)))
+	if r1 != 0 {
+		return errors.Wrap(err, "setting missing kernel entry")
+	}
+
+	return nil
 }
 
 func AddDeviceToTracking(device types.DevID) error {
