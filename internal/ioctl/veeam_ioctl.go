@@ -20,6 +20,8 @@ const (
 	VEEAM_DEV  = "/dev/veeamsnap"
 
 	SNAP_STORE_NOT_FOUND = 0xffffffffffffffff
+
+	KERNEL_ENTRY_BASE_NAME = "__request_module"
 )
 
 var (
@@ -53,4 +55,8 @@ var (
 
 	// persistent CBT data parameter
 	IOCTL_PERSISTENTCBT_DATA uintptr = 2148292168
+
+	// kernel entry resolvers
+	IOCTL_GET_UNRESOLVED_KERNEL_ENTRIES uintptr = 2415941129
+	IOCTL_SET_KERNEL_ENTRIES            uintptr = 1074550280
 )

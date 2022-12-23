@@ -90,6 +90,9 @@ copy_agent_binary() {
     if [ "$1" != "$DEFAUL_BINARY_PATH" ]; then
         cp $1 $DEFAULT_BINARY_PATH
     fi
+
+    # setting caps required to set kernel entry addresses from /proc/kallsyms
+    setcap 'CAP_SYSLOG+ep' $DEFAULT_BINARY_PATH
 }
 
 render_config_file() {
