@@ -121,7 +121,15 @@ render_config_file() {
 
     CONFIG_FILE_PATH=$DEFAULT_CONFIG_DIR/config.toml
     DISK_DEVICE_NAMES=$(lsblk -o NAME,SIZE,TYPE | grep -e 'disk$' | awk '{print $1}')
-    SNAPSTORE_DISK=$(lsblk -dno pkname $SNAPSTORE_DEVICE)
+    SNAPSTORE_DEVICE_NAME=$(basename $SNAPSTORE_DEVICE)
+    SNAPSTORE_DISK=$(readlink -f /sys/class/block/$SNAPSTORE_DEVICE_NAME | awk -F/ '{print $(NF-1)}')
+    # Here we need to identify the snapstore partition's disk, so we skip from adding it to the list
+    # of snapstore mappings. The line above identifies the parent of the snapstore disk device.
+    # If the parent is "block", that means that the snapstore partition was created directly on the
+    # disk device (i.e. /dev/sdb), and not a separate partition (i.e. /dev/sdb1).
+    if [ "$SNAPSTORE_DISK" = "block" ]; then
+        SNAPSTORE_DISK=$SNAPSTORE_DEVICE_NAME
+    fi
     cat $BASE_DIR/config-template.toml | envsubst > $CONFIG_FILE_PATH
     for DISK_NAME in $DISK_DEVICE_NAMES; do
         # filter out disk set as snapstore
