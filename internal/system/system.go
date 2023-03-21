@@ -246,7 +246,7 @@ func GetSystemInfo(mgr *manager.Snapshot) (SystemInfo, error) {
 		return SystemInfo{}, errors.Wrap(err, "fetching CPU info")
 	}
 
-	disks, err := mgr.ListDisks(false)
+	disks, err := mgr.ListDisks(false, false)
 	if err != nil {
 		return SystemInfo{}, errors.Wrap(err, "fetching disk info")
 	}

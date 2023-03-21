@@ -48,7 +48,9 @@ type APIController struct {
 func (a *APIController) ListDisksHandler(w http.ResponseWriter, r *http.Request) {
 	includeVirtualArg := r.URL.Query().Get("includeVirtual")
 	includeVirtual := parseBoolParam(includeVirtualArg, false)
-	disks, err := a.mgr.ListDisks(includeVirtual)
+	includeSwapArg := r.URL.Query().Get("includeSwap")
+	includeSwap := parseBoolParam(includeSwapArg, false)
+	disks, err := a.mgr.ListDisks(includeVirtual, includeSwap)
 	if err != nil {
 		log.Printf("failed to list disks: %q", err)
 		handleError(w, err)

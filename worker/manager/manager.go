@@ -188,8 +188,8 @@ func (m *Snapshot) Unlock() {
 	m.mux.Unlock()
 }
 
-func (m *Snapshot) listDisks(includeVirtual bool) ([]storage.BlockVolume, error) {
-	devices, err := storage.BlockDeviceList(false, includeVirtual)
+func (m *Snapshot) listDisks(includeVirtual bool, includeSwap bool) ([]storage.BlockVolume, error) {
+	devices, err := storage.BlockDeviceList(false, includeVirtual, includeSwap)
 	if err != nil {
 		return nil, errors.Wrap(err, "listing devices")
 	}
@@ -222,8 +222,8 @@ func (m *Snapshot) listDisks(includeVirtual bool) ([]storage.BlockVolume, error)
 	return ret, nil
 }
 
-func (m *Snapshot) ListDisks(includeVirtual bool) ([]params.BlockVolume, error) {
-	devices, err := m.listDisks(includeVirtual)
+func (m *Snapshot) ListDisks(includeVirtual bool, includeSwap bool) ([]params.BlockVolume, error) {
+	devices, err := m.listDisks(includeVirtual, includeSwap)
 	if err != nil {
 		return nil, errors.Wrap(err, "listing devices")
 	}
@@ -270,7 +270,7 @@ func (m *Snapshot) GetTrackedDisk(diskID string) (params.BlockVolume, error) {
 }
 
 func (m *Snapshot) findDiskByPath(path string) (storage.BlockVolume, error) {
-	disks, err := m.listDisks(true)
+	disks, err := m.listDisks(true, true)
 	if err != nil {
 		return storage.BlockVolume{}, errors.Wrap(err, "fetching disk list")
 	}

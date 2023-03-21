@@ -99,7 +99,7 @@ func (m *Snapshot) initTrackedDisks() (err error) {
 		return nil
 	}
 	// listDisks excludes disks configured as snap store destinations.
-	disks, err := m.listDisks(false)
+	disks, err := m.listDisks(false, false)
 	if err != nil {
 		return errors.Wrap(err, "fetching disks list")
 	}

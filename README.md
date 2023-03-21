@@ -43,6 +43,8 @@ Within the kernel module, tracking is the process by which an individual block v
 
 Coriolis treats all machines it migrates as black boxes. So this agent will always track raw block volumes, regardless of what they contain. We do not care about device mappers or filesystems residing on those volumes.
 
+WARNING! The agent does not support tracking or transferring swap or virtual disks. The aim of this agent is covering migration of physical servers to virtual space. There is no point in tracking changes of such disks, therefore the agent filters them out. The lack of swap disks should not interfere with the server booting on a destination platform, but its performance should still be checked, and, if needed, eventually raise the destination machine's memory.
+
 ### Snap store
 
 As mentioned, the kernel module enables block level copy-on-write snapshots of physical disks on a running linux system. But any copy-on-write system needs a place to copy any changed blocks that need to remain private to a particular snapshot. That is where snap stores come in. A snap store is a container in which the CoW data can be stored. The kernel module gives us 3 options here:
