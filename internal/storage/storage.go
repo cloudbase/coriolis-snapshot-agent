@@ -454,7 +454,7 @@ func GetBlockDeviceInfo(name string) (BlockVolume, error) {
 // BlockDeviceList returns a list of BlockVolume structures, populated with
 // information about locally visible disks. This does not include the block
 // device chunks.
-func BlockDeviceList(ignoreMounted bool, includeVirtual bool) ([]BlockVolume, error) {
+func BlockDeviceList(ignoreMounted bool, includeVirtual bool, includeSwap bool) ([]BlockVolume, error) {
 	devList, err := ioutil.ReadDir(sysfsPath)
 	if err != nil {
 		return nil, err
@@ -483,6 +483,9 @@ func BlockDeviceList(ignoreMounted bool, includeVirtual bool) ([]BlockVolume, er
 		if ignoreMounted && hasMounted {
 			continue
 		}
+		if info.FilesystemType == "swap" && !includeSwap {
+			continue
+		}
 		ret = append(ret, info)
 	}
 	return ret, nil
@@ -491,7 +494,7 @@ func BlockDeviceList(ignoreMounted bool, includeVirtual bool) ([]BlockVolume, er
 // FindDeviceByID returns the path in /dev to a device identified
 // by major:minor.
 func FindDeviceByID(major uint32, minor uint32) (string, error) {
-	devices, err := BlockDeviceList(false, true)
+	devices, err := BlockDeviceList(false, true, true)
 	if err != nil {
 		return "", errors.Wrap(err, "fetching devices")
 	}
@@ -514,7 +517,7 @@ func FindDeviceByID(major uint32, minor uint32) (string, error) {
 // FindBlockVolumeByID returns a BlockVolume{} that identifies the device with
 // major:minor.
 func FindBlockVolumeByID(major uint32, minor uint32) (BlockVolume, error) {
-	devices, err := BlockDeviceList(false, true)
+	devices, err := BlockDeviceList(false, true, true)
 	if err != nil {
 		return BlockVolume{}, errors.Wrap(err, "fetching devices")
 	}
