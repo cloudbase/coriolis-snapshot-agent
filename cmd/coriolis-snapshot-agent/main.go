@@ -28,6 +28,7 @@ import (
 	"coriolis-snapshot-agent/apiserver/controllers"
 	"coriolis-snapshot-agent/apiserver/routers"
 	"coriolis-snapshot-agent/config"
+	"coriolis-snapshot-agent/internal/ioctl"
 	"coriolis-snapshot-agent/internal/storage"
 	"coriolis-snapshot-agent/scripts"
 	"coriolis-snapshot-agent/util"
@@ -70,6 +71,10 @@ func main() {
 	log.SetOutput(logWriter)
 
 	ctx, cancel := context.WithCancel(context.Background())
+
+	if err := ioctl.SetMissingKernelEntries(); err != nil {
+		log.Fatalf("Error setting missing kernel entries: %+v\n", err)
+	}
 
 	udevMonitor := storage.NewUdevMonitor(ctx, cancel)
 	go udevMonitor.Start()

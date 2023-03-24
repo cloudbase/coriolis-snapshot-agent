@@ -5,7 +5,7 @@ go 1.16
 require (
 	github.com/BurntSushi/toml v0.3.1
 	github.com/StackExchange/wmi v0.0.0-20210224194228-fe8f1750fd46 // indirect
-	github.com/farjump/go-libudev v0.0.0-20171109190736-8b0739cd6d0b // indirect
+	github.com/farjump/go-libudev v0.0.0-20171109190736-8b0739cd6d0b
 	github.com/google/uuid v1.2.0
 	github.com/gorilla/handlers v1.5.1
 	github.com/gorilla/mux v1.8.0
